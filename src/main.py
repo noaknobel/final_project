@@ -3,7 +3,7 @@ from src.sheet_visualizer import SheetVisualizer
 
 
 def main():
-    my_sheet = Sheet(rows=5, columns=5)
+    my_sheet = Sheet(rows=20, columns=10)
     my_visualizer = SheetVisualizer(my_sheet)
     my_visualizer.run()
 
