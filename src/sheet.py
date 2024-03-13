@@ -1,6 +1,6 @@
 from typing import Dict, Tuple
 
-from src.cell import Cell
+from cell import Cell
 
 
 class Sheet:

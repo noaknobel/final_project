@@ -1,7 +1,7 @@
 import tkinter as tk
 from typing import Optional
 
-from src.sheet import Sheet
+from sheet import Sheet
 
 
 class SheetVisualizer:

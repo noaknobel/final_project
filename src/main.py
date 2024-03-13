@@ -1,5 +1,5 @@
-from src.sheet import Sheet
-from src.sheet_visualizer import SheetVisualizer
+from sheet import Sheet
+from sheet_visualizer import SheetVisualizer
 
 
 def main():
