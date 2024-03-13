@@ -8,11 +8,13 @@ class SheetVisualizer:
     SPREADSHEET_TITLE = "Sheet Visualizer"
     SPREADSHEET_NAME = "Noa's Spreadsheet"
     CURRENT_DEFAULT_STRING = ""
-    FONT = ("Arial", 12)
+    FONT = ("Arial", 14)
     TITLE_FONT = ("Arial", 16, "bold")
     SPREADSHEET_NAME_ROW = 0
     CURRENT_CELL_ROW = 1
     CURRENT_CELL_VALUE_ROW = 2
+    FIRST_CELL_ROW = 3
+    ROW_INDEX_COLUMN = 0
 
     def __init__(self, sheet):
         self.sheet: Sheet = sheet
@@ -34,25 +36,21 @@ class SheetVisualizer:
         title_label = tk.Label(self.root, text=self.SPREADSHEET_NAME, font=self.TITLE_FONT)
         title_label.grid(row=self.SPREADSHEET_NAME_ROW, column=1, columnspan=self.sheet.columns_num + 2, pady=10)
 
-        # Add current cell indicator row
-        current_cell_row = 1
-        current_value_row = 2
-
-        # Add index row (row numbers)
+        # Add index row (row numbers start with 1).
         for row in range(1, self.sheet.rows_num + 1):
-            index_label = tk.Label(self.root, text=str(row), font=("Arial", 14))
-            index_label.grid(row=row + 3, column=0)
+            index_label = tk.Label(self.root, text=str(row), font=self.FONT)
+            index_label.grid(row=row + self.FIRST_CELL_ROW, column=self.ROW_INDEX_COLUMN)
 
-        # Add Excel-like column labels
+        # Add Excel-like column labels.
         for col in range(1, self.sheet.columns_num + 1):
-            col_label = tk.Label(self.root, text=chr(col + 64), font=("Arial", 14))
+            col_label = tk.Label(self.root, text=chr(col + 64), font=self.FONT)
             col_label.grid(row=3, column=col + 1)
 
         # Add cells
         for row in range(1, self.sheet.rows_num + 1):
             for col in range(1, self.sheet.columns_num + 1):
                 cell_value = self.sheet.get_cell(row, col).value
-                cell_entry = tk.Entry(self.root, width=10, font=("Arial", 14))
+                cell_entry = tk.Entry(self.root, width=10, font=self.FONT)
                 cell_visual = str(cell_value) if cell_value is not None else ""
                 cell_entry.insert(tk.END, cell_visual)
                 cell_entry.grid(row=row + 3, column=col + 1)
