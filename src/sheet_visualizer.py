@@ -1,23 +1,38 @@
 import tkinter as tk
+from typing import Optional
+
 from src.sheet import Sheet
 
+
 class SheetVisualizer:
+    SPREADSHEET_TITLE = "Sheet Visualizer"
+    SPREADSHEET_NAME = "Noa's Spreadsheet"
+    CURRENT_DEFAULT_STRING = ""
+    FONT = ("Arial", 12)
+    TITLE_FONT = ("Arial", 16, "bold")
+    SPREADSHEET_NAME_ROW = 0
+    CURRENT_CELL_ROW = 1
+    CURRENT_CELL_VALUE_ROW = 2
+
     def __init__(self, sheet):
         self.sheet: Sheet = sheet
         self.root = tk.Tk()
-        self.root.title("Sheet Visualizer")
+        self.root.title(self.SPREADSHEET_TITLE)
         self.cells = {}
-        self.current_cell = None
-        self.current_cell_label = tk.Label(self.root, text="", font=("Arial", 12))
-        self.current_cell_label.grid(row=1, column=1, columnspan=self.sheet.columns_num+1)
-        self.current_value_label = tk.Label(self.root, text="", font=("Arial", 12))
-        self.current_value_label.grid(row=2, column=1, columnspan=self.sheet.columns_num+1)
+        # Init current cell values.
+        self.current_cell: Optional[tuple] = None  # Initially the cursor is not on a cell.
+        self.current_cell_label = tk.Label(self.root, text=self.CURRENT_DEFAULT_STRING, font=self.FONT)  # Define font.
+        self.current_value_label = tk.Label(self.root, text=self.CURRENT_DEFAULT_STRING, font=self.FONT)
+        # Place the current cell & value in the visual grid.
+        self.current_cell_label.grid(row=self.CURRENT_CELL_ROW, column=1, columnspan=self.sheet.columns_num + 1)
+        self.current_value_label.grid(row=self.CURRENT_CELL_VALUE_ROW, column=1, columnspan=self.sheet.columns_num + 1)
+
         self.create_sheet_ui()
 
     def create_sheet_ui(self):
         # Add title row
-        title_label = tk.Label(self.root, text="Noa's Spreadsheet", font=("Arial", 16, "bold"))
-        title_label.grid(row=0, column=1, columnspan=self.sheet.columns_num+2, pady=10)
+        title_label = tk.Label(self.root, text=self.SPREADSHEET_NAME, font=self.TITLE_FONT)
+        title_label.grid(row=self.SPREADSHEET_NAME_ROW, column=1, columnspan=self.sheet.columns_num + 2, pady=10)
 
         # Add current cell indicator row
         current_cell_row = 1
