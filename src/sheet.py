@@ -2,6 +2,7 @@ from typing import Dict, Tuple, Union, List
 
 from cell import Cell
 
+# TODO - place in a place for all classes.
 Numeric = Union[float, int]
 Value = Union[Numeric, str]
 Location = Tuple[int, str]
