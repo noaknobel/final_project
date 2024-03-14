@@ -22,17 +22,17 @@ class SheetVisualizer:
 
     def __init__(self, sheet):
         self.sheet: Sheet = sheet
+
+        # Init root tk object.
         self.root = tk.Tk()
-        self.root.title(self.SPREADSHEET_TITLE)
         # Store visual entries of cells.
         self.cell_entries: Dict[Tuple[int, str], tk.Entry] = {}
-        # Init current cell values.
+
+        # Init current cell items.
         self.current_cell: Optional[Tuple[int, str]] = None  # Initially the cursor is not on a cell.
         self.current_cell_label = tk.Label(self.root, text=self.CURRENT_CELL_DEFAULT_STRING, font=self.FONT)
         self.current_value_label = tk.Label(self.root, text=self.CURRENT_CELL_DEFAULT_STRING, font=self.FONT)
-        # Place the current cell & value in the visual grid.
-        self.current_cell_label.grid(row=self.CURRENT_CELL_ROW, column=1, columnspan=self.sheet.columns_num + 1)
-        self.current_value_label.grid(row=self.CURRENT_CELL_VALUE_ROW, column=1, columnspan=self.sheet.columns_num + 1)
+
         # Generate the grid of cells.
         self.__create_sheet_ui()
 
@@ -40,25 +40,34 @@ class SheetVisualizer:
         self.root.mainloop()
 
     def __create_sheet_ui(self):
+        # Set the title in the upper left corner of the view.
+        # todo: separate to func
+        self.root.title(self.SPREADSHEET_TITLE)
+
         # Add title row
         title_label = tk.Label(self.root, text=self.SPREADSHEET_NAME, font=self.TITLE_FONT)
         title_label.grid(row=self.SPREADSHEET_NAME_ROW, column=1, columnspan=self.sheet.columns_num + 2, pady=10)
 
-        # Add index row
-        for row_index in range(self.sheet.rows_num):
-            row_name = row_index + 1  # Row numbers start with 1.
-            index_label = tk.Label(self.root, text=str(row_name), font=self.FONT)
-            index_label.grid(row=row_index + self.FIRST_SPREADSHEET_ROW, column=self.ROW_INDEX_COLUMN)
+        # Place the current cell & value in the visual grid.
+        self.current_cell_label.grid(row=self.CURRENT_CELL_ROW, column=1, columnspan=self.sheet.columns_num + 1)
+        self.current_value_label.grid(row=self.CURRENT_CELL_VALUE_ROW, column=1, columnspan=self.sheet.columns_num + 1)
 
         # Add Excel-like column labels.
         for col_index in range(self.sheet.columns_num):
             col_label = tk.Label(self.root, text=self.__get_column_name(col_index), font=self.FONT)
             col_label.grid(row=self.COLUMN_NAMES_ROW, column=col_index + self.FIRST_COLUMN_NAME_INDEX)
 
+        # Add column of row indexes.
+        for row_index in range(self.sheet.rows_num):
+            row_name = row_index + 1  # Row numbers start with 1.
+            index_label = tk.Label(self.root, text=str(row_name), font=self.FONT)
+            index_label.grid(row=row_index + self.FIRST_SPREADSHEET_ROW, column=self.ROW_INDEX_COLUMN)
+
         # Add cells
         self.__add_sheet_ui_to_grid()
 
     def __add_sheet_ui_to_grid(self):
+        # todo - separate func.
         for row_index in range(self.sheet.rows_num):
             row: int = row_index + 1
             for col_index in range(self.sheet.columns_num):
@@ -75,6 +84,7 @@ class SheetVisualizer:
                 cell_entry.bind("<FocusOut>", self.__clear_current_cell_label)
                 cell_entry.bind("<Escape>", self.__reset_current_cell)
                 cell_entry.bind("<KeyRelease>", self.__update_current_value_label)
+                # TODO - updates Escape behavior and add an Enter action.
 
     @staticmethod
     def __get_column_name(col_index):
