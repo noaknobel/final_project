@@ -84,6 +84,7 @@ class SheetVisualizer:
                 cell_entry.bind("<FocusOut>", self.__clear_current_cell_label)
                 cell_entry.bind("<Escape>", self.__reset_current_cell)
                 cell_entry.bind("<KeyRelease>", self.__update_current_value_label)
+                cell_entry.bind("<Return>", self.__update_current_cell_value)
                 # TODO - updates Escape behavior and add an Enter action.
 
     @staticmethod
@@ -103,13 +104,26 @@ class SheetVisualizer:
         self.current_value_label.config(text=self.CURRENT_CELL_DEFAULT_STRING)
 
     def __reset_current_cell(self, event):
+        if self.current_cell:
+            current_cell_entry = self.cell_entries[self.current_cell]
+            current_cell_entry.delete(0, tk.END)  # Clear the text in the entry
         self.root.focus_set()  # Remove focus from the entry widget
         self.current_cell = None
         self.current_cell_label.config(text=self.CURRENT_CELL_DEFAULT_STRING)
         self.current_value_label.config(text=self.CURRENT_CELL_DEFAULT_STRING)
 
-    def __update_current_value_label(self, event=None):
+    def __get_current_cell_value(self) -> Optional[str]:
         if self.current_cell:
             current_cell_entry = self.cell_entries[self.current_cell]
-            cell_value = current_cell_entry.get()
-            self.current_value_label.config(text=f"Cell Content: {cell_value}")
+            return current_cell_entry.get()
+        return None
+
+    def __update_current_value_label(self, event=None):
+        current_cell_val = self.__get_current_cell_value()
+        if current_cell_val is not None:
+            self.current_value_label.config(text=f"Cell Content: {current_cell_val}")
+
+    def __update_current_cell_value(self, event):
+        current_cell_val = self.__get_current_cell_value()
+        if current_cell_val is not None:
+            success, updated_cells = self.sheet.try_update(self.current_cell, current_cell_val)
