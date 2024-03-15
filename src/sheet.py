@@ -59,5 +59,6 @@ class Sheet:
     def __is_formula(value: str) -> bool:
         return value.startswith("=")
 
-    # def __is_valid_formula(value: str):
+    def __parse_formula(value: str):
+        pass
 
