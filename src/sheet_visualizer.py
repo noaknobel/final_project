@@ -26,7 +26,7 @@ class SheetVisualizer:
         # Init root tk object.
         self.root = tk.Tk()
         # Store visual entries of cells.
-        self.cell_entries: Dict[Tuple[int, str], tk.Entry] = {}
+        self.cell_entries: Dict[Tuple[int, str], tk.Entry] = {}  # todo - consider matrix.
 
         # Init current cell items.
         self.current_cell: Optional[Tuple[int, str]] = None  # Initially the cursor is not on a cell.
@@ -46,19 +46,19 @@ class SheetVisualizer:
 
         # Add title row
         title_label = tk.Label(self.root, text=self.SPREADSHEET_NAME, font=self.TITLE_FONT)
-        title_label.grid(row=self.SPREADSHEET_NAME_ROW, column=1, columnspan=self.sheet.columns_num + 2, pady=10)
+        title_label.grid(row=self.SPREADSHEET_NAME_ROW, column=1, columnspan=self.sheet.get_columns_number() + 2, pady=10)
 
         # Place the current cell & value in the visual grid.
-        self.current_cell_label.grid(row=self.CURRENT_CELL_ROW, column=1, columnspan=self.sheet.columns_num + 1)
-        self.current_value_label.grid(row=self.CURRENT_CELL_VALUE_ROW, column=1, columnspan=self.sheet.columns_num + 1)
+        self.current_cell_label.grid(row=self.CURRENT_CELL_ROW, column=1, columnspan=self.sheet.get_columns_number() + 1)
+        self.current_value_label.grid(row=self.CURRENT_CELL_VALUE_ROW, column=1, columnspan=self.sheet.get_columns_number() + 1)
 
         # Add Excel-like column labels.
-        for col_index in range(self.sheet.columns_num):
+        for col_index in range(self.sheet.get_columns_number()):
             col_label = tk.Label(self.root, text=self.__get_column_name(col_index), font=self.FONT)
             col_label.grid(row=self.COLUMN_NAMES_ROW, column=col_index + self.FIRST_COLUMN_NAME_INDEX)
 
         # Add column of row indexes.
-        for row_index in range(self.sheet.rows_num):
+        for row_index in range(self.sheet.get_rows_number()):
             row_name = row_index + 1  # Row numbers start with 1.
             index_label = tk.Label(self.root, text=str(row_name), font=self.FONT)
             index_label.grid(row=row_index + self.FIRST_SPREADSHEET_ROW, column=self.ROW_INDEX_COLUMN)
@@ -68,11 +68,11 @@ class SheetVisualizer:
 
     def __add_sheet_ui_to_grid(self):
         # todo - separate func.
-        for row_index in range(self.sheet.rows_num):
+        for row_index in range(self.sheet.get_rows_number()):
             row: int = row_index + 1
-            for col_index in range(self.sheet.columns_num):
+            for col_index in range(self.sheet.get_columns_number()):
                 col: str = self.__get_column_name(col_index)
-                cell_value: Union[str, int, float] = self.sheet.get_cell(row, col).value
+                cell_value: Union[str, int, float] = self.sheet.get_value(row, col)
                 cell_visual = str(cell_value) if cell_value is not None else ""
                 cell_entry = tk.Entry(self.root, width=10, font=self.FONT)
                 cell_entry.insert(tk.END, cell_visual)
@@ -82,7 +82,6 @@ class SheetVisualizer:
                 # Set callbacks on GUI actions.
                 cell_entry.bind("<FocusIn>", lambda event, r=row, c=col: self.__update_current_cell_label(r, c))
                 cell_entry.bind("<FocusOut>", self.__clear_current_cell_label)
-                cell_entry.bind("<Escape>", self.__reset_current_cell)
                 cell_entry.bind("<KeyRelease>", self.__update_current_value_label)
                 cell_entry.bind("<Return>", self.__update_current_cell_value)
                 # TODO - updates Escape behavior and add an Enter action.
@@ -100,17 +99,9 @@ class SheetVisualizer:
 
     def __clear_current_cell_label(self, event):
         self.current_cell_label.config(text=self.CURRENT_CELL_DEFAULT_STRING)
-        self.current_cell = None
         self.current_value_label.config(text=self.CURRENT_CELL_DEFAULT_STRING)
-
-    def __reset_current_cell(self, event):
-        if self.current_cell:
-            current_cell_entry = self.cell_entries[self.current_cell]
-            current_cell_entry.delete(0, tk.END)  # Clear the text in the entry
-        self.root.focus_set()  # Remove focus from the entry widget
+        self.__update_current_cell_value()
         self.current_cell = None
-        self.current_cell_label.config(text=self.CURRENT_CELL_DEFAULT_STRING)
-        self.current_value_label.config(text=self.CURRENT_CELL_DEFAULT_STRING)
 
     def __get_current_cell_value(self) -> Optional[str]:
         if self.current_cell:
@@ -123,7 +114,16 @@ class SheetVisualizer:
         if current_cell_val is not None:
             self.current_value_label.config(text=f"Cell Content: {current_cell_val}")
 
-    def __update_current_cell_value(self, event):
+    def __update_current_cell_value(self, event=None):
         current_cell_val = self.__get_current_cell_value()
         if current_cell_val is not None:
-            success, updated_cells = self.sheet.try_update(self.current_cell, current_cell_val)
+            # todo - check the success and update the updated cells in the ui.
+            success, locations_to_updated_values = self.sheet.try_update(self.current_cell, current_cell_val)
+            if success:
+                for loc, value in locations_to_updated_values.items():
+                    entry = self.cell_entries.get(loc)
+                    entry.delete(0, tk.END)
+                    entry.insert(0, str(value))
+            else:
+                pass
+                # TODO - handle error
