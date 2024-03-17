@@ -116,20 +116,23 @@ class ExpressionParser:
         return (operator2.associativity == Associativity.LTR and operator2.precedence <= operator1.precedence) or (
                 operator2.associativity == Associativity.RTL and operator2.precedence < operator1.precedence)
 
-    def __generate_postfix(self, tokens: List[str], tokens_postfix: List[str]) -> None:
+    def __generate_postfix(self, tokens: List[str], tokens_postfix: List[Union[Operator, str]]) -> None:
         """
         Gets a list of valid tokens and reorders them as a math equation in a postfix order.
         The method works recursively and does the same operation for each sub expression (in parentheses).
         The method appends all postfix items to the given tokens_postfix input param.
         Raises an exception if the expression does not obey math expression rules.
         """
+        # If the expression (or an inner expression in brackets) is empty - raise an exception.
         if not tokens:
             raise InvalidExpressionException("Expression is not valid.")
         number_of_tokens = len(tokens)
-        operators_stack: list[tuple[str, Operator]] = []
+        operators_stack: list[Operator] = []
         is_previous_character_operand = False
         i = 0
         while i < number_of_tokens:
+
+            # If there is a sub-expression in brackets - find the end of the brackets and recursively add it.
             if self.__is_open_bracket(tokens[i]):
                 if is_previous_character_operand:
                     raise InvalidExpressionException("Open bracket must can't come directly after an operand.")
@@ -153,21 +156,27 @@ class ExpressionParser:
                 i = idx
                 is_previous_character_operand = True
 
+            # If there was a close bracket not handled by the previous block -
+            # it doesn't have a matching openner and its an error.
             elif self.__is_close_bracket(tokens[i]):
                 raise InvalidParenthesesException("Expression's parenthesis are not balanced.")
 
+            # Skip white-space tokens.
             elif tokens[i].isspace():
                 i += 1
                 continue
 
             elif self.__is_operator(tokens[i]):
+
+                # Find matching operator from the list that matches the operator symbol.
+                # If there are both unary and binary operators with that same symbol - choose the correct one.
                 unary_rule = binary_rule = None
                 is_valid = False
-                for rule in (op for op in self.operators if op.symbol == tokens[i]):
-                    if rule.type == OperatorType.UNARY:
-                        unary_rule = rule
-                    if rule.type == OperatorType.BINARY:
-                        binary_rule = rule
+                for matching_operator in (op for op in self.operators if op.symbol == tokens[i]):
+                    if matching_operator.type == OperatorType.UNARY:
+                        unary_rule = matching_operator
+                    if matching_operator.type == OperatorType.BINARY:
+                        binary_rule = matching_operator
                 if unary_rule:
                     if (unary_rule.position == Traversal.POSTFIX and is_previous_character_operand) or (
                             unary_rule.position == Traversal.PREFIX and not is_previous_character_operand):
@@ -178,33 +187,41 @@ class ExpressionParser:
                         is_valid = True
                         unary_rule = None
                     is_previous_character_operand = False
-                if not is_valid:
-                    raise InvalidExpressionException(
-                        "expression is not valid.")
-                while operators_stack and self.does_have_higher_precedence(operators_stack[-1][1],
-                                                                           unary_rule if unary_rule else binary_rule):
-                    tokens_postfix.append(operators_stack[-1][1])
-                    operators_stack.pop()
-                operators_stack.append(
-                    (tokens[i], unary_rule if unary_rule else binary_rule))
-                # print("OP stack:", operators_stack)
-            elif self.__is_operand(tokens[i]):
-                if is_previous_character_operand:
-                    raise InvalidExpressionException(
-                        "expression is not valid.")
-                is_previous_character_operand = True
-                tokens_postfix.append(tokens[i])
 
+                # If none of them are valid - raise an exception.
+                if not is_valid:
+                    raise InvalidExpressionException("expression is not valid.")
+                current_operator = unary_rule if unary_rule else binary_rule
+
+                # Pop from the operators stack all operators that have higher precedence than the current operator,
+                # and move them to the postfix array before handling the current operator,
+                # so their order in the tree later on will be according to the correct computation order
+                while operators_stack and self.does_have_higher_precedence(operators_stack[-1], current_operator):
+                    top = operators_stack.pop()
+                    tokens_postfix.append(top)
+                operators_stack.append(current_operator)
+
+
+            elif self.__is_operand(tokens[i]):
+                # Can't have 2 operands one after another.
+                if is_previous_character_operand:
+                    raise InvalidExpressionException("expression is not valid.")
+                is_previous_character_operand = True
+                # If the token is an operand, simply add it to the postfix list.
+                tokens_postfix.append(tokens[i])
             else:
-                raise InvalidExpressionException(
-                    "expression is not valid.")
+                # Unexpected token - wasn't true for any of the if-else cases above.
+                raise InvalidExpressionException("expression is not valid.")
+            # Move to the next token in the loop of the expression.
             i += 1
+
+        # Must finish the expression (or any sub-expression) with an operand.
         if not is_previous_character_operand:
-            raise InvalidExpressionException(
-                "expression is not valid.")
+            raise InvalidExpressionException("expression is not valid.")
+        # Any operators left in the stack of the current expression - pop and move to the postfix list. todo - why? when? example?
         while operators_stack:
-            tokens_postfix.append(operators_stack[-1][1])
-            operators_stack.pop()
+            top = operators_stack.pop()
+            tokens_postfix.append(top)
 
     def __postfix(self, expression: str) -> List[Union[str, Operator]]:
         """Return the postfix form for the expression."""
@@ -254,9 +271,10 @@ if __name__ == '__main__':
                           position=Traversal.PREFIX)]
 
     parser = ExpressionParser(operators)
-    x = parser.syntax_tree('{sin(-33) * (X2^3)} + A11')
+    x = parser.syntax_tree('{-sin(-33) * (X2^3)} + A11')
     print(x)
-    x = parser.syntax_tree('((1+2))')
+    x = parser.syntax_tree('((1-2))')
+    x = parser.syntax_tree('-sin3')
     print(x)
-    # x = parser.syntax_tree('((1 + 4 + 4 + 4) * (1 + 5)) + 1')
-    # print(x)
+    x = parser.syntax_tree('((1 + 4 + 4 + 4) * (1 + 5)) + 1')
+    print(x)
