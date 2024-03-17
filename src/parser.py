@@ -112,6 +112,7 @@ class ExpressionParser:
 
     @staticmethod
     def does_have_higher_precedence(operator1: Operator, operator2: Operator) -> bool:
+        # TODO
         return (operator2.associativity == Associativity.LTR and operator2.precedence <= operator1.precedence) or (
                 operator2.associativity == Associativity.RTL and operator2.precedence < operator1.precedence)
 
@@ -131,11 +132,11 @@ class ExpressionParser:
         while i < number_of_tokens:
             if self.__is_open_bracket(tokens[i]):
                 if is_previous_character_operand:
-                    raise InvalidExpressionException("Expression is not valid.")
+                    raise InvalidExpressionException("Open bracket must can't come directly after an operand.")
                 open_brackets_count = 0
                 idx = i
                 # find its close bracket.
-                while open_brackets_count != 1 or not self.__is_close_bracket(tokens[idx]):
+                while not (open_brackets_count == 1 and self.__is_close_bracket(tokens[idx])):
                     if self.__is_open_bracket(tokens[idx]):
                         open_brackets_count += 1
                     elif self.__is_close_bracket(tokens[idx]):
@@ -143,7 +144,7 @@ class ExpressionParser:
                     idx += 1
                     if idx >= number_of_tokens:
                         raise InvalidParenthesesException(
-                            "expression's parenthesis are not balanced.")
+                            "expression's parenthesis are not balancved.")
                 if not self.__are_parentheses_pairs(tokens[i], tokens[idx]):
                     raise InvalidParenthesesException(
                         "expression's parenthesis are not balanced.")
@@ -153,8 +154,7 @@ class ExpressionParser:
                 is_previous_character_operand = True
 
             elif self.__is_close_bracket(tokens[i]):
-                raise InvalidParenthesesException(
-                    "expression's parenthesis are not balanced.")
+                raise InvalidParenthesesException("Expression's parenthesis are not balanced.")
 
             elif tokens[i].isspace():
                 i += 1
@@ -256,7 +256,7 @@ if __name__ == '__main__':
     parser = ExpressionParser(operators)
     x = parser.syntax_tree('{sin(-33) * (X2^3)} + A11')
     print(x)
-    # x = parser.syntax_tree('- 44 - 5')
-    # print(x)
+    x = parser.syntax_tree('((1+2))')
+    print(x)
     # x = parser.syntax_tree('((1 + 4 + 4 + 4) * (1 + 5)) + 1')
     # print(x)
