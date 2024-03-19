@@ -119,97 +119,72 @@ class ExpressionParser:
     def __generate_postfix(self, tokens: List[str], tokens_postfix: List[Union[Operator, str]]) -> None:
         """
         Gets a list of valid tokens and reorders them as a math equation in a postfix order.
-        The method works recursively and does the same operation for each sub expression (in parentheses).
-        The method appends all postfix items to the given tokens_postfix input param.
+        This method uses an operator stack to handle operators and parentheses, ensuring that the expression obeys
+        mathematical rules and that parentheses are properly balanced.
+        It appends all postfix items to the given tokens_postfix input parameter.
         Raises an exception if the expression does not obey math expression rules.
         """
-        # If the expression (or an inner expression in brackets) is empty - raise an exception.
+        # If the expression is empty, raise an exception.
         if not tokens:
             raise InvalidExpressionException("Expression is not valid.")
-        number_of_tokens = len(tokens)
-        operators_stack: list[Operator] = []
+
+        operators_stack: list[Union[Operator, str]] = []  # Stores Operator instances, and string parentheses.
         is_previous_character_operand = False
-        i = 0
-        while i < number_of_tokens:
-
-            # If there is a sub-expression in brackets - find the end of the brackets and recursively add it.
-            if self.__is_open_bracket(tokens[i]):
-                if is_previous_character_operand:
-                    raise InvalidExpressionException("Open bracket must can't come directly after an operand.")
-                open_brackets_count = 0
-                idx = i
-                # find its close bracket.
-                while not (open_brackets_count == 1 and self.__is_close_bracket(tokens[idx])):
-                    if self.__is_open_bracket(tokens[idx]):
-                        open_brackets_count += 1
-                    elif self.__is_close_bracket(tokens[idx]):
-                        open_brackets_count -= 1
-                    idx += 1
-                    if idx >= number_of_tokens:
-                        raise InvalidParenthesesException(
-                            "expression's parenthesis are not balancved.")
-                if not self.__are_parentheses_pairs(tokens[i], tokens[idx]):
-                    raise InvalidParenthesesException(
-                        "expression's parenthesis are not balanced.")
-                self.__generate_postfix(tokens[i + 1: idx], tokens_postfix)
-
-                i = idx
-                is_previous_character_operand = True
-
-            # If there was a close bracket not handled by the previous block -
-            # it doesn't have a matching openner and its an error.
-            elif self.__is_close_bracket(tokens[i]):
-                raise InvalidParenthesesException("Expression's parenthesis are not balanced.")
-
-            # Skip white-space tokens.
-            elif tokens[i].isspace():
-                i += 1
-                continue
-
-            elif self.__is_operator(tokens[i]):
-
-                # Find matching operator from the list that matches the operator symbol.
-                # If there are both unary and binary operators with that same symbol - choose the correct one.
-                matching_operators: List[Operator] = [op for op in self.operators if op.symbol == tokens[i]]
-                # If the previous token was an operand, search for a binary operator.
-                # If not, search for an unary operator.
-                if is_previous_character_operand:
-                    operator = next(filter(lambda op: op.type == OperatorType.BINARY, matching_operators), None)
-                else:
-                    operator = next(filter(lambda op: op.type == OperatorType.UNARY, matching_operators), None)
+        tokens = [token for token in tokens if not token.isspace()]  # Skip white-space tokens
+        for token in tokens:
+            if self.__is_open_bracket(token):
+                if is_previous_character_operand:  # Prevents "(operand(" without operator in between
+                    raise InvalidExpressionException("An open bracket cannot directly follow an operand.")
+                operators_stack.append(token)
                 is_previous_character_operand = False
-                # If none of them are valid - raise an exception.
+
+            elif self.__is_close_bracket(token):
+                # Pop from the stack until an open bracket is found
+                while operators_stack and not self.__is_open_bracket(operators_stack[-1]):
+                    tokens_postfix.append(operators_stack.pop())
+                if not operators_stack:
+                    raise InvalidParenthesesException("Mismatched parentheses in expression.")
+                open_bracket = operators_stack.pop()  # Pop the open bracket
+                if not self.__are_parentheses_pairs(open_bracket, token):
+                    raise InvalidParenthesesException(
+                        f"Mismatched parentheses in expression: {open_bracket} and {token}")
+                is_previous_character_operand = True  # A closed parenthesis can act as an operand
+
+            elif self.__is_operator(token):
+                # Find the matching operator
+                matching_operators = [op for op in self.operators if op.symbol == token]
+                operator = next((op for op in matching_operators if (
+                    op.type == OperatorType.BINARY if is_previous_character_operand else op.type == OperatorType.UNARY
+                )), None)
+
                 if not operator:
-                    raise InvalidExpressionException("expression is not valid.")
+                    raise InvalidExpressionException("Invalid operator in expression.")
 
-                # Pop from the operators stack all operators that have higher precedence than the current operator,
-                # and move them to the postfix array before handling the current operator,
-                # so their order in the tree later on will be according to the correct computation order
-                while operators_stack and self.does_have_higher_precedence(operators_stack[-1], operator):
-                    top = operators_stack.pop()
-                    tokens_postfix.append(top)
+                # Pop operators with higher or equal precedence
+                while operators_stack and isinstance(operators_stack[-1], Operator) and \
+                        self.does_have_higher_precedence(operators_stack[-1], operator):
+                    tokens_postfix.append(operators_stack.pop())
+
                 operators_stack.append(operator)
+                is_previous_character_operand = False
 
-            elif self.__is_operand(tokens[i]):
-                # Can't have 2 operands one after another.
+            elif self.__is_operand(token):
                 if is_previous_character_operand:
-                    raise InvalidExpressionException("Can't have 2 operands in a row.")
+                    raise InvalidExpressionException("Cannot have two operands in a row.")
+                tokens_postfix.append(token)
                 is_previous_character_operand = True
-                # If the token is an operand, simply add it to the postfix list.
-                tokens_postfix.append(tokens[i])
             else:
-                # Unexpected token - wasn't true for any of the if-else cases above.
-                raise InvalidExpressionException("expression is not valid.")
-            # Move to the next token in the loop of the expression.
-            i += 1
+                raise InvalidExpressionException(f"Invalid token in expression: {token}")
 
-        # Must finish the expression (or any sub-expression) with an operand.
-        if not is_previous_character_operand:
-            raise InvalidExpressionException("expression is not valid.")
-        # Any operators left in the stack of the current expression - pop and move to the postfix list. todo - why? when? example?
+        # At the end of the expression, pop all remaining operators from the stack
         while operators_stack:
-            top = operators_stack.pop()
-            tokens_postfix.append(top)
+            if self.__is_open_bracket(operators_stack[-1]):
+                raise InvalidParenthesesException("Mismatched parentheses in expression.")
+            tokens_postfix.append(operators_stack.pop())
+
+        # Ensure the expression ends with an operand
+        if not is_previous_character_operand:
+            raise InvalidExpressionException("The expression must end with an operand.")
 
     def __postfix(self, expression: str) -> List[Union[str, Operator]]:
         """Return the postfix form for the expression."""
@@ -254,8 +229,10 @@ if __name__ == '__main__':
     x = parser.syntax_tree('{-sin(-33) * (X2^3)} + A11')
     print(x)
     x = parser.syntax_tree('((1-2))')
+    print(x)
     x = parser.syntax_tree('-sin1/3')
     print(x)
-    # x = parser.syntax_tree('((1 + 4 + 4 + 4) * (1 + 5)) + 1')
+    x = parser.syntax_tree('({1 + 4 + 4 + 4} * [(1 + 5)+1]) + 1')
+    print(x)
     x = parser.syntax_tree('1^2^3')
     print(x)
