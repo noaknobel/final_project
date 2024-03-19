@@ -15,10 +15,18 @@ class ExpressionParser:
     LOCATION_PATTERN = re.compile(r'^[A-Z]+[0-9]+$')
 
     def __init__(self, operators: List[Operator]) -> None:
+        """
+        Initializes the ExpressionParser with a list of operators.
+        :param operators: A list of Operator objects that are valid in the expressions this parser will parse.
+        """
         self.operators = operators
 
     def __is_operator(self, token):
-        """Checks whether the given token equals a symbol of a valid operator."""
+        """
+        Checks whether the given token equals a symbol of a valid operator.
+        :param token: The string to check.
+        :return: True if the token is an operator, False otherwise.
+        """
         return any(op.symbol == token for op in self.operators)
 
     def __is_operand(self, string: str) -> bool:
@@ -65,13 +73,20 @@ class ExpressionParser:
         return self.__is_close_bracket(char) or self.__is_open_bracket(char)
 
     def __is_valid_token(self, token: str) -> bool:
+        """
+        Checks if a given string is a valid token in the context of the parser.
+        A valid token is either a bracket, a whitespace, an operand, or an operator.
+        :param token: The string to check.
+        :return: True if the token is valid, False otherwise.
+        """
         return self.__is_bracket(token) or token.isspace() or self.__is_operand(token) or self.__is_operator(token)
 
     def __find_next_matching_token(self, expression: str, start_index: int) -> str:
         """
-        A helper method that searches for a valid token that starts at the given start index in the expression.
-        It continues until the end of the string and returns the longest valid token that starts at that index in case
-        there are multiple ones. If there is none - return an empty string.
+        Finds the next valid token in the expression starting from the given index.
+        :param expression: The expression being parsed.
+        :param start_index: The index from where to start the search.
+        :return: The longest valid token starting from the start_index. Returns an empty string if no valid token is found.
         """
         current_checked_substring = ""
         longest_valid_token = ""
@@ -84,8 +99,10 @@ class ExpressionParser:
 
     def __tokenize(self, expression: str) -> List[str]:
         """
-        Splits the expression into valid tokens.
-        :raises ParserException: If there is an invalid token in the expression.
+        Converts the expression into a list of valid tokens.
+        :param expression: The expression to tokenize.
+        :return: A list of strings where each string is a valid token in the expression.
+        :raises ParserException: If an invalid token is found in the expression.
         """
         index = 0
         tokens = []
@@ -155,6 +172,12 @@ class ExpressionParser:
 
     def __handle_close_bracket(self, operators_stack: List[Union[Operator, str]],
                                tokens_postfix: List[Union[Operator, str]]) -> None:
+        """
+        Handles the logic when a closing bracket is encountered during the conversion of an expression to postfix notation.
+        :param operators_stack: The stack currently storing operators and open brackets.
+        :param tokens_postfix: The current postfix token list being constructed.
+        :raises ParserException: If there is a mismatched parenthesis.
+        """
         while operators_stack:
             top = operators_stack.pop()
             if self.__is_open_bracket(top):
@@ -165,16 +188,34 @@ class ExpressionParser:
 
     def __handle_operator(self, operator: Operator, operators_stack: List[Union[Operator, str]],
                           tokens_postfix: List[Union[Operator, str]]) -> None:
+        """
+        Handles the logic when an operator is encountered during the conversion of an expression to postfix notation.
+        This includes applying the operator precedence rules.
+        :param operator: The operator encountered.
+        :param operators_stack: The stack currently storing operators and open brackets.
+        :param tokens_postfix: The current postfix token list being constructed.
+        """
         while operators_stack and isinstance(operators_stack[-1], Operator) and self.__does_have_higher_precedence(
                 operators_stack[-1], operator):
             tokens_postfix.append(operators_stack.pop())
         operators_stack.append(operator)
 
     def __find_operator(self, token: str, operator_type: OperatorType) -> Optional[Operator]:
+        """
+        Finds an operator from the list of valid operators based on its symbol and type.
+        :param token: The symbol of the operator to find.
+        :param operator_type: The type of the operator (Unary/Binary).
+        :return: The Operator object if found, None otherwise.
+        """
         return next((op for op in self.operators if op.symbol == token and op.type == operator_type), None)
 
     def syntax_tree(self, expression: str) -> Node:
-        """Return the expression syntax tree."""
+        """
+        Parses the given algebraic expression and converts it into a syntax tree.
+        :param expression: The algebraic expression to parse.
+        :return: The root node of the syntax tree representing the given expression.
+        :raises ParserException: If the expression is invalid or cannot be parsed into a valid syntax tree.
+        """
         tokens = self.__tokenize(expression)
         postfix: List[Union[str, Operator]] = self.__postfix(tokens)
         stack = []
