@@ -1,7 +1,7 @@
 import re
 from typing import List, Union
 
-from expression_operator import Operator, OperatorType, Traversal, Associativity
+from expression_operator import Operator, OperatorType, Associativity
 from node import Node
 
 
@@ -170,42 +170,30 @@ class ExpressionParser:
 
                 # Find matching operator from the list that matches the operator symbol.
                 # If there are both unary and binary operators with that same symbol - choose the correct one.
-                unary_rule = binary_rule = None
-                is_valid = False
-                for matching_operator in (op for op in self.operators if op.symbol == tokens[i]):
-                    if matching_operator.type == OperatorType.UNARY:
-                        unary_rule = matching_operator
-                    if matching_operator.type == OperatorType.BINARY:
-                        binary_rule = matching_operator
-                if unary_rule:
-                    if (unary_rule.position == Traversal.POSTFIX and is_previous_character_operand) or (
-                            unary_rule.position == Traversal.PREFIX and not is_previous_character_operand):
-                        is_valid = True
-                        binary_rule = None
-                if binary_rule:
-                    if is_previous_character_operand:
-                        is_valid = True
-                        unary_rule = None
-                    is_previous_character_operand = False
-
+                matching_operators: List[Operator] = [op for op in self.operators if op.symbol == tokens[i]]
+                # If the previous token was an operand, search for a binary operator.
+                # If not, search for an unary operator.
+                if is_previous_character_operand:
+                    operator = next(filter(lambda op: op.type == OperatorType.BINARY, matching_operators), None)
+                else:
+                    operator = next(filter(lambda op: op.type == OperatorType.UNARY, matching_operators), None)
+                is_previous_character_operand = False
                 # If none of them are valid - raise an exception.
-                if not is_valid:
+                if not operator:
                     raise InvalidExpressionException("expression is not valid.")
-                current_operator = unary_rule if unary_rule else binary_rule
 
                 # Pop from the operators stack all operators that have higher precedence than the current operator,
                 # and move them to the postfix array before handling the current operator,
                 # so their order in the tree later on will be according to the correct computation order
-                while operators_stack and self.does_have_higher_precedence(operators_stack[-1], current_operator):
+                while operators_stack and self.does_have_higher_precedence(operators_stack[-1], operator):
                     top = operators_stack.pop()
                     tokens_postfix.append(top)
-                operators_stack.append(current_operator)
-
+                operators_stack.append(operator)
 
             elif self.__is_operand(tokens[i]):
                 # Can't have 2 operands one after another.
                 if is_previous_character_operand:
-                    raise InvalidExpressionException("expression is not valid.")
+                    raise InvalidExpressionException("Can't have 2 operands in a row.")
                 is_previous_character_operand = True
                 # If the token is an operand, simply add it to the postfix list.
                 tokens_postfix.append(tokens[i])
@@ -240,16 +228,9 @@ class ExpressionParser:
             if isinstance(postfix[i], Operator):
                 node = Node(postfix[i].symbol)
                 if postfix[i].type == OperatorType.UNARY:
-                    if postfix[i].position == Traversal.POSTFIX:
-                        if len(stack) < 1:
-                            raise InvalidExpressionException(
-                                "expression is not valid.")
-                        node.left = stack.pop()
-                    if postfix[i].position == Traversal.PREFIX:
-                        if len(stack) < 1:
-                            raise InvalidExpressionException(
-                                "expression is not valid.")
-                        node.right = stack.pop()
+                    if len(stack) < 1:
+                        raise InvalidExpressionException("expression is not valid.")
+                    node.right = stack.pop()
                 if postfix[i].type == OperatorType.BINARY:
                     if len(stack) < 2:
                         raise InvalidExpressionException(
@@ -262,19 +243,19 @@ class ExpressionParser:
 
 
 if __name__ == '__main__':
-    operators = [Operator(symbol='+'), Operator(symbol='/', precedence=2), Operator(symbol='-'),
-                 Operator(symbol='*', precedence=2),
-                 Operator(symbol='-', operator_type=OperatorType.UNARY, precedence=3, associativity=Associativity.RTL,
-                          position=Traversal.PREFIX),
-                 Operator(symbol='^', precedence=4),
-                 Operator(symbol='sin', operator_type=OperatorType.UNARY, precedence=3, associativity=Associativity.RTL,
-                          position=Traversal.PREFIX)]
+    operators = [Operator(symbol='+'), Operator(symbol='-'),
+                 Operator(symbol='*', precedence=2), Operator(symbol='/', precedence=2),
+                 Operator(symbol='-', operator_type=OperatorType.UNARY, precedence=3, associativity=Associativity.RTL),
+                 Operator(symbol='sin', operator_type=OperatorType.UNARY, precedence=3,
+                          associativity=Associativity.RTL),
+                 Operator(symbol='^', precedence=4, associativity=Associativity.RTL)]
 
     parser = ExpressionParser(operators)
     x = parser.syntax_tree('{-sin(-33) * (X2^3)} + A11')
     print(x)
     x = parser.syntax_tree('((1-2))')
-    x = parser.syntax_tree('-sin3')
+    x = parser.syntax_tree('-sin1/3')
     print(x)
-    x = parser.syntax_tree('((1 + 4 + 4 + 4) * (1 + 5)) + 1')
+    # x = parser.syntax_tree('((1 + 4 + 4 + 4) * (1 + 5)) + 1')
+    x = parser.syntax_tree('1^2^3')
     print(x)
