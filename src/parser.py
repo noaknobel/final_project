@@ -1,5 +1,6 @@
 import re
-from typing import List, Union, Optional
+from typing import Callable, Optional
+from typing import List, Union
 
 from expression_operator import Operator, OperatorType, Associativity
 from node import Node
@@ -268,6 +269,63 @@ class ExpressionParser:
                 node = Node(token)
             stack.append(node)
         return stack.pop()
+
+    @classmethod
+    def evaluate(cls, node: Optional[Node], get_cell_value: Callable[[str], float]) -> float:
+        """
+        Recursively evaluates the syntax tree from the given node.
+        :param node: Root of the syntax tree to evaluate.
+        :param get_cell_value: Function that retrieves the value of a cell given its location identifier,
+                               used to resolve cell references encountered in the expression tree.
+        :return: Evaluated result as a float.
+        :raises ParserException: If the provided node is None or if evaluation fails due to invalid structure.
+        """
+        if node is None:
+            raise ParserException("Empty expression.")
+        if node.is_leaf():
+            return cls.__evaluate_leaf_node(node, get_cell_value)
+        return cls.__evaluate_internal_node(node, get_cell_value)
+
+    @staticmethod
+    def __evaluate_leaf_node(node: Node, get_cell_value: Callable[[str], float]) -> float:
+        """
+        Evaluates a leaf node.
+        :param node: The leaf node to evaluate.
+        :param get_cell_value: Retrieves the value of a cell given its location identifier.
+        :return: The numerical value associated with the leaf node.
+        :raises ParserException: If the leaf node contains an invalid value.
+        """
+        if isinstance(node.value, float):
+            return node.value
+        elif isinstance(node.value, str):
+            return get_cell_value(node.value)
+        else:
+            raise ParserException(f"Invalid leaf value: {node.value}")
+
+    @classmethod
+    def __evaluate_internal_node(cls, node: Node, get_cell_value: Callable[[str], float]) -> float:
+        """
+        Evaluates an internal (non-leaf) node.
+
+        :param node: The internal node to evaluate.
+        :param get_cell_value: Retrieves the value of a cell given its location identifier.
+        :return: The result of evaluating the operation represented by the node.
+        :raises ParserException: If the node contains an unsupported value or operation.
+        """
+        if not isinstance(node.value, Operator):
+            raise ParserException(f"Unsupported node value: {node.value}")
+        left_val = cls.evaluate(node.left, get_cell_value) if node.left else None
+        right_val = cls.evaluate(node.right, get_cell_value) if node.right else None
+        if node.value.type == OperatorType.UNARY:
+            if right_val is None:
+                raise ParserException("Missing operand for unary operator.")
+            return node.value.calculate(right_val)
+        elif node.value.type == OperatorType.BINARY:
+            if left_val is None or right_val is None:
+                raise ParserException("Missing operands for binary operator.")
+            return node.value.calculate(right_val, left_val)
+        else:
+            raise ParserException(f"Unsupported operator type: {node.value.type}")
 
 
 if __name__ == '__main__':

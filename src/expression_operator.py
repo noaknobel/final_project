@@ -30,3 +30,7 @@ class Operator:
 
     def __repr__(self) -> str:
         return f"Operator(symbol='{self.symbol}', type={self.type}, precedence={self.precedence}, associativity='{self.associativity}')"
+
+    def calculate(self, right_val, left_val=None):
+        # TODO!!! - implement for each operator. consider inheritance, or pass this method in the init.
+        pass
