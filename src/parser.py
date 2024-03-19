@@ -157,32 +157,8 @@ class ExpressionParser:
         tokens = [token for token in tokens if not token.isspace()]
 
         for token in tokens:
-            if self.__is_open_bracket(token):
-                if is_previous_character_operand:
-                    raise ParserException("An open bracket cannot directly follow an operand.")
-                operators_stack.append(token)
-                is_previous_character_operand = False
-
-            elif self.__is_close_bracket(token):
-                self.__handle_close_bracket(operators_stack, tokens_postfix)
-                is_previous_character_operand = True
-
-            elif self.__is_operator(token):
-                operator_type = OperatorType.BINARY if is_previous_character_operand else OperatorType.UNARY
-                operator = self.__find_operator(token, operator_type)
-                if operator is None:
-                    raise ParserException("Invalid operator in expression.")
-                self.__handle_operator(operator, operators_stack, tokens_postfix)
-                is_previous_character_operand = False
-
-            elif self.__is_operand(token):
-                if is_previous_character_operand:
-                    raise ParserException("Cannot have two operands in a row.")
-                tokens_postfix.append(token)
-                is_previous_character_operand = True
-
-            else:
-                raise ParserException(f"Invalid token in expression: {token}")
+            is_previous_character_operand = self.__process_token_postfix(token, operators_stack, tokens_postfix,
+                                                                         is_previous_character_operand)
 
         while operators_stack:
             tokens_postfix.append(operators_stack.pop())
@@ -190,6 +166,42 @@ class ExpressionParser:
         if not is_previous_character_operand:
             raise ParserException("The expression must end with an operand.")
         return tokens_postfix
+
+    from typing import List, Union
+
+    def __process_token_postfix(self, token: str, operators_stack: List[str],
+                                tokens_postfix: List[Union[str, Operator]],
+                                is_previous_character_operand: bool) -> bool:
+        """
+        Processes a single token in the postfix logic.
+        :param token: The current token from the expression.
+        :param operators_stack: A stack (implemented as a list) holding operators and parentheses during conversion.
+        :param tokens_postfix: The list accumulating the postfix representation tokens.
+        :param is_previous_character_operand: Flag indicating if the preceding token in the sequence was an operand.
+        :return: Returns True if the processed token is an operand, otherwise False.
+        :raises ParserException: Whether the token's arrangement breaks rules.
+        """
+        if self.__is_open_bracket(token):
+            if is_previous_character_operand:
+                raise ParserException("An open bracket cannot directly follow an operand.")
+            operators_stack.append(token)
+            return False
+        if self.__is_close_bracket(token):
+            self.__handle_close_bracket(operators_stack, tokens_postfix)
+            return True
+        if self.__is_operator(token):
+            operator_type = OperatorType.BINARY if is_previous_character_operand else OperatorType.UNARY
+            operator = self.__find_operator(token, operator_type)
+            if operator is None:
+                raise ParserException("Invalid operator in expression.")
+            self.__handle_operator(operator, operators_stack, tokens_postfix)
+            return False
+        if self.__is_operand(token):
+            if is_previous_character_operand:
+                raise ParserException("Cannot have two operands in a row.")
+            tokens_postfix.append(token)
+            return True
+        raise ParserException(f"Invalid token in expression: {token}")
 
     def __handle_close_bracket(self, operators_stack: List[Union[Operator, str]],
                                tokens_postfix: List[Union[Operator, str]]) -> None:
