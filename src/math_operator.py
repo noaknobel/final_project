@@ -11,7 +11,7 @@ class Associativity(Enum):
     RTL = auto()
 
 
-class Operator:
+class MathOperator:
     def __init__(self, symbol: str, precedence: int = 1, operator_type: OperatorType = OperatorType.BINARY,
                  associativity: Associativity = Associativity.LTR) -> None:
         """

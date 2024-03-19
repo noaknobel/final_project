@@ -1,9 +1,8 @@
 import re
-from typing import Callable, Optional
-from typing import List, Union
+from typing import Callable, Optional, List, Union
 
-from operator import Operator, OperatorType, Associativity
 from node import Node
+from math_operator import MathOperator, OperatorType, Associativity
 
 
 class ParserException(Exception):
@@ -15,7 +14,7 @@ class ExpressionParser:
     """Algebraic expression parser."""
     LOCATION_PATTERN = re.compile(r'^[A-Z]+[0-9]+$')
 
-    def __init__(self, operators: List[Operator]) -> None:
+    def __init__(self, operators: List[MathOperator]) -> None:
         """
         Initializes the ExpressionParser with a list of operators.
         :param operators: A list of Operator objects that are valid in the expressions this parser will parse.
@@ -123,7 +122,7 @@ class ExpressionParser:
                     (open_bracket == "[" and close_bracket == "]")])
 
     @staticmethod
-    def __does_have_higher_precedence(operator1: Operator, operator2: Operator) -> bool:
+    def __does_have_higher_precedence(operator1: MathOperator, operator2: MathOperator) -> bool:
         """
         Determines if the second (current) operator has higher precedence than the first (previous) operator.
         This is dependent on the operator's associativity and precedence.
@@ -138,7 +137,7 @@ class ExpressionParser:
         return (operator2.associativity == Associativity.LTR and operator2.precedence <= operator1.precedence) or (
                 operator2.associativity == Associativity.RTL and operator2.precedence < operator1.precedence)
 
-    def __postfix(self, tokens: List[str]) -> List[Union[Operator, str]]:
+    def __postfix(self, tokens: List[str]) -> List[Union[MathOperator, str]]:
         """
         Converts a list of tokens representing an algebraic expression into its postfix form.
         This method handles operator precedence, associativity, and parentheses.
@@ -152,8 +151,8 @@ class ExpressionParser:
         """
         if not tokens:
             raise ParserException("List of tokens is empty.")
-        tokens_postfix: List[Union[Operator, str]] = []
-        operators_stack: list[Union[Operator, str]] = []  # Stores Operator instances, and parentheses strings.
+        tokens_postfix: List[Union[MathOperator, str]] = []
+        operators_stack: list[Union[MathOperator, str]] = []  # Stores Operator instances, and parentheses strings.
         is_previous_character_operand = False
         tokens = [token for token in tokens if not token.isspace()]
 
@@ -171,7 +170,7 @@ class ExpressionParser:
     from typing import List, Union
 
     def __process_token_postfix(self, token: str, operators_stack: List[str],
-                                tokens_postfix: List[Union[str, Operator]],
+                                tokens_postfix: List[Union[str, MathOperator]],
                                 is_previous_character_operand: bool) -> bool:
         """
         Processes a single token in the postfix logic.
@@ -204,8 +203,8 @@ class ExpressionParser:
             return True
         raise ParserException(f"Invalid token in expression: {token}")
 
-    def __handle_close_bracket(self, operators_stack: List[Union[Operator, str]],
-                               tokens_postfix: List[Union[Operator, str]]) -> None:
+    def __handle_close_bracket(self, operators_stack: List[Union[MathOperator, str]],
+                               tokens_postfix: List[Union[MathOperator, str]]) -> None:
         """
         Handles the logic when a closing bracket is encountered during the conversion of an expression to postfix notation.
         :param operators_stack: The stack currently storing operators and open brackets.
@@ -220,8 +219,8 @@ class ExpressionParser:
         else:  # This else corresponds to the while, it executes if no break occurs (no open bracket found)
             raise ParserException("Mismatched parentheses in expression.")
 
-    def __handle_operator(self, operator: Operator, operators_stack: List[Union[Operator, str]],
-                          tokens_postfix: List[Union[Operator, str]]) -> None:
+    def __handle_operator(self, operator: MathOperator, operators_stack: List[Union[MathOperator, str]],
+                          tokens_postfix: List[Union[MathOperator, str]]) -> None:
         """
         Handles the logic when an operator is encountered during the conversion of an expression to postfix notation.
         This includes applying the operator precedence rules.
@@ -229,12 +228,12 @@ class ExpressionParser:
         :param operators_stack: The stack currently storing operators and open brackets.
         :param tokens_postfix: The current postfix token list being constructed.
         """
-        while operators_stack and isinstance(operators_stack[-1], Operator) and self.__does_have_higher_precedence(
+        while operators_stack and isinstance(operators_stack[-1], MathOperator) and self.__does_have_higher_precedence(
                 operators_stack[-1], operator):
             tokens_postfix.append(operators_stack.pop())
         operators_stack.append(operator)
 
-    def __find_operator(self, token: str, operator_type: OperatorType) -> Optional[Operator]:
+    def __find_operator(self, token: str, operator_type: OperatorType) -> Optional[MathOperator]:
         """
         Finds an operator from the list of valid operators based on its symbol and type.
         :param token: The symbol of the operator to find.
@@ -251,10 +250,10 @@ class ExpressionParser:
         :raises ParserException: If the expression is invalid or cannot be parsed into a valid syntax tree.
         """
         tokens = self.__tokenize(expression)
-        postfix: List[Union[str, Operator]] = self.__postfix(tokens)
+        postfix: List[Union[str, MathOperator]] = self.__postfix(tokens)
         stack = []
         for token in postfix:
-            if isinstance(token, Operator):
+            if isinstance(token, MathOperator):
                 node = Node(token.symbol)
                 if token.type == OperatorType.UNARY:
                     if len(stack) < 1:
@@ -312,7 +311,7 @@ class ExpressionParser:
         :return: The result of evaluating the operation represented by the node.
         :raises ParserException: If the node contains an unsupported value or operation.
         """
-        if not isinstance(node.value, Operator):
+        if not isinstance(node.value, MathOperator):
             raise ParserException(f"Unsupported node value: {node.value}")
         left_val = cls.evaluate(node.left, get_cell_value) if node.left else None
         right_val = cls.evaluate(node.right, get_cell_value) if node.right else None
@@ -329,12 +328,13 @@ class ExpressionParser:
 
 
 if __name__ == '__main__':
-    operators = [Operator(symbol='+'), Operator(symbol='-'),
-                 Operator(symbol='*', precedence=2), Operator(symbol='/', precedence=2),
-                 Operator(symbol='-', operator_type=OperatorType.UNARY, precedence=3, associativity=Associativity.RTL),
-                 Operator(symbol='sin', operator_type=OperatorType.UNARY, precedence=3,
-                          associativity=Associativity.RTL),
-                 Operator(symbol='^', precedence=4, associativity=Associativity.RTL)]
+    operators = [MathOperator(symbol='+'), MathOperator(symbol='-'),
+                 MathOperator(symbol='*', precedence=2), MathOperator(symbol='/', precedence=2),
+                 MathOperator(symbol='-', operator_type=OperatorType.UNARY, precedence=3,
+                              associativity=Associativity.RTL),
+                 MathOperator(symbol='sin', operator_type=OperatorType.UNARY, precedence=3,
+                              associativity=Associativity.RTL),
+                 MathOperator(symbol='^', precedence=4, associativity=Associativity.RTL)]
 
     parser = ExpressionParser(operators)
     x = parser.syntax_tree('{-sin(-33) * (X2^3)} + A11')
