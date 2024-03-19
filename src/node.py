@@ -13,6 +13,15 @@ class Node:
     def __repr__(self) -> str:
         return f"Node(value={self.value}, left={self.left}, right={self.right})"
 
+    def is_leaf(self) -> bool:
+        """
+        Checks whether the node is a leaf node.
+        :return: True if the node is a leaf, False otherwise.
+        """
+        return self.left is None and self.right is None
+
+    # TODO - consider remove all traversal methods (if not used).
+
     def __preorder(self, root: "Node", result: List) -> None:
         if not root:
             return
