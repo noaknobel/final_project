@@ -109,7 +109,7 @@ class ExpressionParser:
         while index < len(expression):
             token = self.__find_next_matching_token(expression, index)
             if not token:
-                raise ParserException("Expression is not valid.")
+                raise ParserException(f"Could not find a valid token at index {index} of the expression.")
             index += len(token)
             tokens.append(token)
         return tokens
@@ -150,7 +150,7 @@ class ExpressionParser:
                                   operand. It also checks if the expression ends with an operand.
         """
         if not tokens:
-            raise ParserException("Expression is not valid.")
+            raise ParserException("List of tokens is empty.")
         tokens_postfix: List[Union[Operator, str]] = []
         operators_stack: list[Union[Operator, str]] = []  # Stores Operator instances, and parentheses strings.
         is_previous_character_operand = False
@@ -252,23 +252,21 @@ class ExpressionParser:
         tokens = self.__tokenize(expression)
         postfix: List[Union[str, Operator]] = self.__postfix(tokens)
         stack = []
-        i = 0
-        while i < len(postfix):
-            node = Node(postfix[i])
-            if isinstance(postfix[i], Operator):
-                node = Node(postfix[i].symbol)
-                if postfix[i].type == OperatorType.UNARY:
+        for token in postfix:
+            if isinstance(token, Operator):
+                node = Node(token.symbol)
+                if token.type == OperatorType.UNARY:
                     if len(stack) < 1:
-                        raise ParserException("expression is not valid.")
+                        raise ParserException("Unary operator has no operand.")
                     node.right = stack.pop()
-                if postfix[i].type == OperatorType.BINARY:
+                if token.type == OperatorType.BINARY:
                     if len(stack) < 2:
-                        raise ParserException(
-                            "expression is not valid.")
+                        raise ParserException("Binary operator doesn't have 2 operands.")
                     node.right = stack.pop()
                     node.left = stack.pop()
+            else:
+                node = Node(token)
             stack.append(node)
-            i += 1
         return stack.pop()
 
 
