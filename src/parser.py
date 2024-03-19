@@ -123,11 +123,32 @@ class ExpressionParser:
 
     @staticmethod
     def __does_have_higher_precedence(operator1: Operator, operator2: Operator) -> bool:
-        # TODO
+        """
+        Determines if the second (current) operator has higher precedence than the first (previous) operator.
+        This is dependent on the operator's associativity and precedence.
+        If the second operator is left-to-right associative and its precedence is less than or equal to that of the first,
+        or if the second operator is right-to-left associative and its precedence is less than that of the first,
+        then the second operator is considered to have higher precedence.
+
+        :param operator1: The first operator (previously on the stack).
+        :param operator2: The second operator (currently being considered).
+        :return: True if the second operator has higher precedence, False otherwise.
+        """
         return (operator2.associativity == Associativity.LTR and operator2.precedence <= operator1.precedence) or (
                 operator2.associativity == Associativity.RTL and operator2.precedence < operator1.precedence)
 
     def __postfix(self, tokens: List[str]) -> List[Union[Operator, str]]:
+        """
+        Converts a list of tokens representing an algebraic expression into its postfix form.
+        This method handles operator precedence, associativity, and parentheses.
+        It ensures that operators with higher precedence are placed before operators with lower precedence in the output
+         list. Parentheses are handled to enforce the proper ordering and grouping of operations.
+        :param tokens: A list of strings representing the tokens of an algebraic expression.
+        :return: A list containing the tokens of the expression arranged in postfix notation.
+        :raises ParserException: If the expression contains syntax errors such as unbalanced parentheses,
+                                 two operands in a row without an operator, or an open bracket directly following an
+                                  operand. It also checks if the expression ends with an operand.
+        """
         if not tokens:
             raise ParserException("Expression is not valid.")
         tokens_postfix: List[Union[Operator, str]] = []
