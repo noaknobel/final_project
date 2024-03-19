@@ -2,7 +2,7 @@ import re
 from typing import Callable, Optional
 from typing import List, Union
 
-from expression_operator import Operator, OperatorType, Associativity
+from operator import Operator, OperatorType, Associativity
 from node import Node
 
 
