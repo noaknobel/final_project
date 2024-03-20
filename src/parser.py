@@ -1,8 +1,9 @@
 import re
 from typing import Callable, Optional, List, Union
 
+from math_operator import MathOperator, UnaryOperator, BinaryOperator, Associativity, \
+    Plus, Minus, Times, Divide, Negate, Sin, Power
 from node import Node
-from math_operator import MathOperator, OperatorType, Associativity
 
 
 class ParserException(Exception):
@@ -14,12 +15,12 @@ class ExpressionParser:
     """Algebraic expression parser."""
     LOCATION_PATTERN = re.compile(r'^[A-Z]+[0-9]+$')
 
-    def __init__(self, operators: List[MathOperator]) -> None:
+    def __init__(self, math_operators: List[MathOperator]) -> None:
         """
         Initializes the ExpressionParser with a list of operators.
-        :param operators: A list of Operator objects that are valid in the expressions this parser will parse.
+        :param math_operators: A list of Operator objects that are valid in the expressions this parser will parse.
         """
-        self.operators = operators
+        self.operators = math_operators
 
     def __is_operator(self, token):
         """
@@ -86,7 +87,8 @@ class ExpressionParser:
         Finds the next valid token in the expression starting from the given index.
         :param expression: The expression being parsed.
         :param start_index: The index from where to start the search.
-        :return: The longest valid token starting from the start_index. Returns an empty string if no valid token is found.
+        :return: The longest valid token starting from the start_index.
+        Returns an empty string if no valid token is found.
         """
         current_checked_substring = ""
         longest_valid_token = ""
@@ -126,8 +128,8 @@ class ExpressionParser:
         """
         Determines if the second (current) operator has higher precedence than the first (previous) operator.
         This is dependent on the operator's associativity and precedence.
-        If the second operator is left-to-right associative and its precedence is less than or equal to that of the first,
-        or if the second operator is right-to-left associative and its precedence is less than that of the first,
+        If the second operator is left-to-right associative and its precedence is less than or equal to that of the
+        first, or if the second operator is right-to-left associative and its precedence is less than that of the first,
         then the second operator is considered to have higher precedence.
 
         :param operator1: The first operator (previously on the stack).
@@ -167,8 +169,6 @@ class ExpressionParser:
             raise ParserException("The expression must end with an operand.")
         return tokens_postfix
 
-    from typing import List, Union
-
     def __process_token_postfix(self, token: str, operators_stack: List[str],
                                 tokens_postfix: List[Union[str, MathOperator]],
                                 is_previous_character_operand: bool) -> bool:
@@ -190,8 +190,7 @@ class ExpressionParser:
             self.__handle_close_bracket(operators_stack, tokens_postfix)
             return True
         if self.__is_operator(token):
-            operator_type = OperatorType.BINARY if is_previous_character_operand else OperatorType.UNARY
-            operator = self.__find_operator(token, operator_type)
+            operator = self.__find_operator(token, is_previous_character_operand)
             if operator is None:
                 raise ParserException("Invalid operator in expression.")
             self.__handle_operator(operator, operators_stack, tokens_postfix)
@@ -206,7 +205,8 @@ class ExpressionParser:
     def __handle_close_bracket(self, operators_stack: List[Union[MathOperator, str]],
                                tokens_postfix: List[Union[MathOperator, str]]) -> None:
         """
-        Handles the logic when a closing bracket is encountered during the conversion of an expression to postfix notation.
+        Handles the logic when a closing bracket is encountered during the conversion of an expression to postfix
+        notation.
         :param operators_stack: The stack currently storing operators and open brackets.
         :param tokens_postfix: The current postfix token list being constructed.
         :raises ParserException: If there is a mismatched parenthesis.
@@ -233,14 +233,17 @@ class ExpressionParser:
             tokens_postfix.append(operators_stack.pop())
         operators_stack.append(operator)
 
-    def __find_operator(self, token: str, operator_type: OperatorType) -> Optional[MathOperator]:
+    def __find_operator(self, token: str, is_previous_character_operand: bool) -> Optional[MathOperator]:
         """
-        Finds an operator from the list of valid operators based on its symbol and type.
+        Finds an operator from the list of valid operators based on its symbol and the context.
         :param token: The symbol of the operator to find.
-        :param operator_type: The type of the operator (Unary/Binary).
+        :param is_previous_character_operand: Indicates whether the previous token is an operand (determines unary/binary).
         :return: The Operator object if found, None otherwise.
         """
-        return next((op for op in self.operators if op.symbol == token and op.type == operator_type), None)
+        filtered_operators = [op for op in self.operators if op.symbol == token]
+        binary_op = next((op for op in filtered_operators if isinstance(op, BinaryOperator)), None)
+        unary_op = next((op for op in filtered_operators if isinstance(op, UnaryOperator)), None)
+        return binary_op if is_previous_character_operand and binary_op else unary_op
 
     def syntax_tree(self, expression: str) -> Node:
         """
@@ -255,11 +258,11 @@ class ExpressionParser:
         for token in postfix:
             if isinstance(token, MathOperator):
                 node = Node(token.symbol)
-                if token.type == OperatorType.UNARY:
+                if isinstance(token, UnaryOperator):
                     if len(stack) < 1:
                         raise ParserException("Unary operator has no operand.")
                     node.right = stack.pop()
-                if token.type == OperatorType.BINARY:
+                if isinstance(token, BinaryOperator):
                     if len(stack) < 2:
                         raise ParserException("Binary operator doesn't have 2 operands.")
                     node.right = stack.pop()
@@ -315,27 +318,21 @@ class ExpressionParser:
             raise ParserException(f"Unsupported node value: {node.value}")
         left_val = cls.evaluate(node.left, get_cell_value) if node.left else None
         right_val = cls.evaluate(node.right, get_cell_value) if node.right else None
-        if node.value.type == OperatorType.UNARY:
+        if isinstance(node.value, UnaryOperator):
             if right_val is None:
                 raise ParserException("Missing operand for unary operator.")
             return node.value.calculate(right_val)
-        elif node.value.type == OperatorType.BINARY:
+        elif isinstance(node.value, BinaryOperator):
             if left_val is None or right_val is None:
                 raise ParserException("Missing operands for binary operator.")
             return node.value.calculate(right_val, left_val)
         else:
-            raise ParserException(f"Unsupported operator type: {node.value.type}")
+            raise ParserException(f"Unsupported operator type: {type(node.value)}")
 
 
 if __name__ == '__main__':
-    operators = [MathOperator(symbol='+'), MathOperator(symbol='-'),
-                 MathOperator(symbol='*', precedence=2), MathOperator(symbol='/', precedence=2),
-                 MathOperator(symbol='-', operator_type=OperatorType.UNARY, precedence=3,
-                              associativity=Associativity.RTL),
-                 MathOperator(symbol='sin', operator_type=OperatorType.UNARY, precedence=3,
-                              associativity=Associativity.RTL),
-                 MathOperator(symbol='^', precedence=4, associativity=Associativity.RTL)]
-
+    # List of operator instances
+    operators = [Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()]
     parser = ExpressionParser(operators)
     x = parser.syntax_tree('{-sin(-33) * (X2^3)} + A11')
     print(x)
