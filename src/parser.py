@@ -194,7 +194,12 @@ class ExpressionParser:
                 raise ParserException("Invalid operator in expression.")
             self.__handle_operator(operator, operators_stack, tokens_postfix)
             return False
-        if self.__is_operand(token):
+        if self.__is_number(token):
+            if is_previous_character_operand:
+                raise ParserException("Cannot have two operands in a row.")
+            tokens_postfix.append(float(token))
+            return True
+        if self.__is_location(token):
             if is_previous_character_operand:
                 raise ParserException("Cannot have two operands in a row.")
             tokens_postfix.append(token)
@@ -255,8 +260,8 @@ class ExpressionParser:
         postfix: List[Union[str, MathOperator]] = self.__postfix(tokens)
         stack = []
         for token in postfix:
+            node = Node(token)
             if isinstance(token, MathOperator):
-                node = Node(token.symbol)
                 if isinstance(token, UnaryOperator):
                     if len(stack) < 1:
                         raise ParserException("Unary operator has no operand.")
@@ -266,8 +271,6 @@ class ExpressionParser:
                         raise ParserException("Binary operator doesn't have 2 operands.")
                     node.right = stack.pop()
                     node.left = stack.pop()
-            else:
-                node = Node(token)
             stack.append(node)
         return stack.pop()
 
@@ -307,7 +310,6 @@ class ExpressionParser:
     def __evaluate_internal_node(cls, node: Node, get_cell_value: Callable[[str], float]) -> float:
         """
         Evaluates an internal (non-leaf) node.
-
         :param node: The internal node to evaluate.
         :param get_cell_value: Retrieves the value of a cell given its location identifier.
         :return: The result of evaluating the operation represented by the node.
@@ -324,7 +326,7 @@ class ExpressionParser:
         elif isinstance(node.value, BinaryOperator):
             if left_val is None or right_val is None:
                 raise ParserException("Missing operands for binary operator.")
-            return node.value.calculate(right_val, left_val)
+            return node.value.calculate(left_val, right_val)
         else:
             raise ParserException(f"Unsupported operator type: {type(node.value)}")
 
@@ -333,8 +335,10 @@ if __name__ == '__main__':
     # List of operator instances
     parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                               var_pattern=re.compile(r'^[A-Z]+[0-9]+$'))
-    x = parser.syntax_tree('{-sin(-33) * (X2^3)} + A11')
-    print(x)
+    equation_tree = parser.syntax_tree('sin(3.14/2) * (X2^3) + A11')
+    value = parser.evaluate(equation_tree, get_cell_value=lambda s: 2)
+    print(equation_tree)
+    print(value)
     x = parser.syntax_tree('((1-2))')
     print(x)
     x = parser.syntax_tree('-sin1/3')
