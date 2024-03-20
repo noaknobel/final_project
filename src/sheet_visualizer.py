@@ -7,15 +7,19 @@ from sheet import Sheet
 class SheetVisualizer:
     SPREADSHEET_TITLE = "Sheet Visualizer"
     SPREADSHEET_NAME = "Noa's Spreadsheet"
+    USER_NAME_LABEL = "Sheet Name:"
     CURRENT_CELL_DEFAULT_STRING = ""
     FONT = ("Arial", 14)
+    COLOR = "#C8A2C8"
     TITLE_FONT = ("Arial", 16, "bold")
+    TITLE_COLOR = "#FF69B4"
     # Index numbers of each visual row in the grid header.
     SPREADSHEET_NAME_ROW = 0
-    CURRENT_CELL_ROW = 1
-    CURRENT_CELL_VALUE_ROW = 2
-    COLUMN_NAMES_ROW = 3
-    FIRST_SPREADSHEET_ROW = 4
+    SPREADSHEET_USER_NAME_ROW = 1
+    CURRENT_CELL_ROW = 2
+    CURRENT_CELL_VALUE_ROW = 3
+    COLUMN_NAMES_ROW = 4
+    FIRST_SPREADSHEET_ROW = 5
     # Column indexes.
     ROW_INDEX_COLUMN = 0
     FIRST_COLUMN_NAME_INDEX = 1
@@ -40,27 +44,42 @@ class SheetVisualizer:
         self.root.mainloop()
 
     def __create_sheet_ui(self):
-        # Set the title in the upper left corner of the view.
         # todo: separate to func
+        # Set the title in the upper left corner of the view.
         self.root.title(self.SPREADSHEET_TITLE)
 
-        # Add title row
-        title_label = tk.Label(self.root, text=self.SPREADSHEET_NAME, font=self.TITLE_FONT)
-        title_label.grid(row=self.SPREADSHEET_NAME_ROW, column=1, columnspan=self.sheet.get_columns_number() + 2, pady=10)
+        # Add title
+        title_label = tk.Label(self.root, text=self.SPREADSHEET_NAME, font=self.TITLE_FONT, fg=self.TITLE_COLOR)
+        title_label.grid(row=self.SPREADSHEET_NAME_ROW, column=1, columnspan=self.sheet.get_columns_number() + 2,
+                         pady=10)
+
+        # Add a save button
+        save_button = tk.Button(self.root, text="Save", command=self.save_changes)
+        save_button.grid(row=self.SPREADSHEET_NAME_ROW, column=1, pady=5, sticky="w")
+
+        # Add label "Sheet name:"
+        sheet_name_label = tk.Label(self.root, text=self.USER_NAME_LABEL, font=self.FONT)
+        sheet_name_label.grid(row=self.SPREADSHEET_USER_NAME_ROW, column=1, pady=5, sticky="e")
+        # Add entry widget for title
+        smaller_title_entry = tk.Entry(self.root, font=self.FONT)
+        smaller_title_entry.grid(row=self.SPREADSHEET_USER_NAME_ROW, column=2,
+                                 columnspan=self.sheet.get_columns_number() + 1, pady=5, sticky="w")
 
         # Place the current cell & value in the visual grid.
-        self.current_cell_label.grid(row=self.CURRENT_CELL_ROW, column=1, columnspan=self.sheet.get_columns_number() + 1)
-        self.current_value_label.grid(row=self.CURRENT_CELL_VALUE_ROW, column=1, columnspan=self.sheet.get_columns_number() + 1)
+        self.current_cell_label.grid(row=self.CURRENT_CELL_ROW, column=1,
+                                     columnspan=self.sheet.get_columns_number() + 1)
+        self.current_value_label.grid(row=self.CURRENT_CELL_VALUE_ROW, column=1,
+                                      columnspan=self.sheet.get_columns_number() + 1)
 
         # Add Excel-like column labels.
         for col_index in range(self.sheet.get_columns_number()):
-            col_label = tk.Label(self.root, text=self.__get_column_name(col_index), font=self.FONT)
+            col_label = tk.Label(self.root, text=self.__get_column_name(col_index), font=self.FONT, fg=self.COLOR)
             col_label.grid(row=self.COLUMN_NAMES_ROW, column=col_index + self.FIRST_COLUMN_NAME_INDEX)
 
         # Add column of row indexes.
         for row_index in range(self.sheet.get_rows_number()):
             row_name = row_index + 1  # Row numbers start with 1.
-            index_label = tk.Label(self.root, text=str(row_name), font=self.FONT)
+            index_label = tk.Label(self.root, text=str(row_name), font=self.FONT, fg=self.COLOR)
             index_label.grid(row=row_index + self.FIRST_SPREADSHEET_ROW, column=self.ROW_INDEX_COLUMN)
 
         # Add cells
@@ -127,3 +146,7 @@ class SheetVisualizer:
             else:
                 pass
                 # TODO - handle error
+
+    def save_changes(self):
+        # todo: Implement saving logic here
+        pass
