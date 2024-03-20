@@ -11,7 +11,6 @@ Location = Tuple[int, str]
 
 class Sheet:
     def __init__(self, rows_number: int, columns_number: int):
-        # TODO - __ privates.
         self.__rows_num: int = rows_number
         self.__columns_num: int = columns_number
         self.__cells: Dict[Location, Cell] = {}  # Dictionary to store cells with their coordinates
@@ -27,6 +26,26 @@ class Sheet:
         if cell is None:
             return None
         return cell.get_value()
+
+    def str_to_loc(self, string: str) -> Optional[Location]:
+        # TODO - delete if not used. If used - refactor
+        """Try to convert a string to location.
+         Assume to get an expression contains only digits and alphabet.
+         returns None for unfit pattern"""
+
+        # Check if string has the expected format (e.g., "A1")
+        if len(string) < 2 or not string[0].isalpha() or not string[1:].isdigit():
+            return None
+        row = ''
+        # todo: func
+        pass
+
+    def in_sheet(self, loc: Location) -> bool:
+        # TODO - delete if not used. If used - refactor
+        """Checks if a location represent a cell on sheet"""
+        if loc is None:
+            return False
+        return 0 < ord(loc[0]) <= self.__columns_num and 0 < loc[1] <= self.__rows_num
 
     def try_update(self, cell_location: Location, value: Value) -> Tuple[bool, Dict[Location, Value]]:
         # TODO if formula - handle + handle exceptions.
@@ -44,11 +63,12 @@ class Sheet:
             return float(value), DataType.NUMBER
         if self.__is_formula(value):
             pass
-            return # TODO
+            return  # TODO
         return value, DataType.STRING
 
     @staticmethod
     def __is_number(value: str) -> bool:
+        # TODO - this code already exists in the parser.
         try:
             float(value)
             return True
@@ -58,7 +78,3 @@ class Sheet:
     @staticmethod
     def __is_formula(value: str) -> bool:
         return value.startswith("=")
-
-    def __parse_formula(value: str):
-        pass
-
