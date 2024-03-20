@@ -13,14 +13,14 @@ class ParserException(Exception):
 
 class ExpressionParser:
     """Algebraic expression parser."""
-    LOCATION_PATTERN = re.compile(r'^[A-Z]+[0-9]+$')
 
-    def __init__(self, math_operators: List[MathOperator]) -> None:
+    def __init__(self, math_operators: List[MathOperator], var_pattern: re.Pattern) -> None:
         """
         Initializes the ExpressionParser with a list of operators.
         :param math_operators: A list of Operator objects that are valid in the expressions this parser will parse.
         """
         self.operators = math_operators
+        self.pattern = var_pattern
 
     def __is_operator(self, token):
         """
@@ -34,13 +34,12 @@ class ExpressionParser:
         """Checks whether the given string is a valid operand."""
         return self.__is_number(string) or self.__is_location(string)
 
-    @classmethod
-    def __is_location(cls, string: str) -> bool:
+    def __is_location(self, string: str) -> bool:
         """
         Checks whether a string is in the format of a valid location in the sheet,
         which is a column string of capital letters, followed by a row number.
         """
-        return bool(cls.LOCATION_PATTERN.match(string))
+        return bool(self.pattern.match(string))
 
     @staticmethod
     def __is_number(var: str) -> bool:
@@ -332,8 +331,8 @@ class ExpressionParser:
 
 if __name__ == '__main__':
     # List of operator instances
-    operators = [Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()]
-    parser = ExpressionParser(operators)
+    parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
+                              var_pattern=re.compile(r'^[A-Z]+[0-9]+$'))
     x = parser.syntax_tree('{-sin(-33) * (X2^3)} + A11')
     print(x)
     x = parser.syntax_tree('((1-2))')
