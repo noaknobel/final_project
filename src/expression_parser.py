@@ -1,8 +1,7 @@
 import re
-from typing import Callable, Optional, List, Union
+from typing import Optional, List, Union
 
-from math_operator import MathOperator, UnaryOperator, BinaryOperator, Associativity, \
-    Plus, Minus, Times, Divide, Negate, Sin, Power
+from math_operator import MathOperator, UnaryOperator, BinaryOperator, Associativity
 from node import Node
 
 
@@ -19,8 +18,8 @@ class ExpressionParser:
         Initializes the ExpressionParser with a list of operators.
         :param math_operators: A list of Operator objects that are valid in the expressions this parser will parse.
         """
-        self.operators = math_operators
-        self.pattern = var_pattern
+        self.__operators = math_operators
+        self.__pattern = var_pattern
 
     def __is_operator(self, token):
         """
@@ -28,7 +27,7 @@ class ExpressionParser:
         :param token: The string to check.
         :return: True if the token is an operator, False otherwise.
         """
-        return any(op.symbol == token for op in self.operators)
+        return any(op.symbol == token for op in self.__operators)
 
     def __is_operand(self, string: str) -> bool:
         """Checks whether the given string is a valid operand."""
@@ -39,7 +38,7 @@ class ExpressionParser:
         Checks whether a string is in the format of a valid location in the sheet,
         which is a column string of capital letters, followed by a row number.
         """
-        return bool(self.pattern.match(string))
+        return bool(self.__pattern.match(string))
 
     @staticmethod
     def __is_number(var: str) -> bool:
@@ -244,7 +243,7 @@ class ExpressionParser:
         :param is_previous_character_operand: Indicates whether the previous token is an operand (determines unary/binary).
         :return: The Operator object if found, None otherwise.
         """
-        filtered_operators = [op for op in self.operators if op.symbol == token]
+        filtered_operators = [op for op in self.__operators if op.symbol == token]
         binary_op = next((op for op in filtered_operators if isinstance(op, BinaryOperator)), None)
         unary_op = next((op for op in filtered_operators if isinstance(op, UnaryOperator)), None)
         return binary_op if is_previous_character_operand and binary_op else unary_op
@@ -257,6 +256,7 @@ class ExpressionParser:
         :raises ParserException: If the expression is invalid or cannot be parsed into a valid syntax tree.
         """
         tokens = self.__tokenize(expression)
+        # TODO - note - "(" without ")" won't raise error inside __postfix.
         postfix: List[Union[str, MathOperator]] = self.__postfix(tokens)
         stack = []
         for token in postfix:
@@ -273,77 +273,3 @@ class ExpressionParser:
                     node.left = stack.pop()
             stack.append(node)
         return stack.pop()
-
-    @classmethod
-    def evaluate(cls, node: Optional[Node], get_cell_value: Callable[[str], float]) -> float:
-        """
-        Recursively evaluates the syntax tree from the given node.
-        :param node: Root of the syntax tree to evaluate.
-        :param get_cell_value: Function that retrieves the value of a cell given its location identifier,
-                               used to resolve cell references encountered in the expression tree.
-        :return: Evaluated result as a float.
-        :raises ParserException: If the provided node is None or if evaluation fails due to invalid structure.
-        """
-        if node is None:
-            raise ParserException("Empty expression.")
-        if node.is_leaf():
-            return cls.__evaluate_leaf_node(node, get_cell_value)
-        return cls.__evaluate_internal_node(node, get_cell_value)
-
-    @staticmethod
-    def __evaluate_leaf_node(node: Node, get_cell_value: Callable[[str], float]) -> float:
-        """
-        Evaluates a leaf node.
-        :param node: The leaf node to evaluate.
-        :param get_cell_value: Retrieves the value of a cell given its location identifier.
-        :return: The numerical value associated with the leaf node.
-        :raises ParserException: If the leaf node contains an invalid value.
-        """
-        if isinstance(node.value, float):
-            return node.value
-        elif isinstance(node.value, str):
-            return get_cell_value(node.value)
-        else:
-            raise ParserException(f"Invalid leaf value: {node.value}")
-
-    @classmethod
-    def __evaluate_internal_node(cls, node: Node, get_cell_value: Callable[[str], float]) -> float:
-        """
-        Evaluates an internal (non-leaf) node.
-        :param node: The internal node to evaluate.
-        :param get_cell_value: Retrieves the value of a cell given its location identifier.
-        :return: The result of evaluating the operation represented by the node.
-        :raises ParserException: If the node contains an unsupported value or operation.
-        """
-        if not isinstance(node.value, MathOperator):
-            raise ParserException(f"Unsupported node value: {node.value}")
-        left_val = cls.evaluate(node.left, get_cell_value) if node.left else None
-        right_val = cls.evaluate(node.right, get_cell_value) if node.right else None
-        if isinstance(node.value, UnaryOperator):
-            if right_val is None:
-                raise ParserException("Missing operand for unary operator.")
-            return node.value.calculate(right_val)
-        elif isinstance(node.value, BinaryOperator):
-            if left_val is None or right_val is None:
-                raise ParserException("Missing operands for binary operator.")
-            return node.value.calculate(left_val, right_val)
-        else:
-            raise ParserException(f"Unsupported operator type: {type(node.value)}")
-
-
-if __name__ == '__main__':
-    # List of operator instances
-    parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
-                              var_pattern=re.compile(r'^[A-Z]+[0-9]+$'))
-    equation_tree = parser.syntax_tree('sin(3.14/2) * (X2^3) + A11')
-    value = parser.evaluate(equation_tree, get_cell_value=lambda s: 2)
-    print(equation_tree)
-    print(value)
-    x = parser.syntax_tree('((1-2))')
-    print(x)
-    x = parser.syntax_tree('-sin1/3')
-    print(x)
-    x = parser.syntax_tree('({1 + 4 + 4 + 4} * [(1 + 5)+1]) + 1')
-    print(x)
-    x = parser.syntax_tree('1^2^3')
-    print(x)

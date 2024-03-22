@@ -1,9 +1,8 @@
 import tkinter as tk
-from typing import Optional, List
+from typing import Optional, List, Union
 
 # TODO - think how to remove direct access to cell here, and use it only through sheet's api,
 #  or - separate the visual cell class from evaltion and logic class.
-from cell import Cell
 from sheet import Sheet
 
 
@@ -105,8 +104,8 @@ class SheetVisualizer:
         ]
         for row_index, entries_row in enumerate(self.__sheet_entries):
             for col_index, entry in enumerate(entries_row):
-                cell: Optional[Cell] = self.sheet.get_cell(row_index, col_index)
-                entry.insert(tk.END, cell.get_value() if cell is not None else "")  # TODO - check.
+                value: Optional[Union[str, float]] = self.sheet.evaluate_position(row_index, col_index)
+                entry.insert(tk.END, value if value is not None else "")  # TODO - check.
                 self.__bind_entry_events(entry, row_index, col_index)
                 # Add the entry to the table view.
                 entry.grid(row=row_index + self.__FIRST_SPREADSHEET_ROW,
@@ -137,7 +136,7 @@ class SheetVisualizer:
         """
         entry.bind("<FocusIn>", lambda event, r=row_index, c=col_index: self.__focus_in_entry(entry, r, c))
         entry.bind("<KeyRelease>", lambda event, r=row_index, c=col_index: self.__key_write_entry(entry))
-        entry.bind("<FocusOut>", lambda event, r=row_index, c=col_index: self.__focus_out_cell(r, c))
+        entry.bind("<FocusOut>", lambda event, r=row_index, c=col_index: self.__focus_out_cell(entry, r, c))
 
     def __focus_in_entry(self, entry: tk.Entry, row_index: int, col_index: int):
         """
@@ -146,14 +145,16 @@ class SheetVisualizer:
         The method occurs when the user clicks on the bound entry.
         """
         self.current_cell_label.config(text=f"Cell: {self.__get_cell_name(col_index, row_index)}")
-        cell: Optional[Cell] = self.sheet.get_cell(row_index, col_index)
-        if cell is not None:
-            content: str = cell.get_content()
-            # Update the label of the current cell content in the head of the view.
-            self.current_value_label.config(text=f"Content: {content}")
-            # Update the view of the cell itself.
-            entry.delete(0, tk.END)
-            entry.insert(0, content)
+        content: Optional[str] = self.sheet.get_cell_content(row_index, col_index)
+        if content is not None:
+            self.__update_current_cell_text_view(content)
+            self.__update_entry_text(entry, content)
+
+    @staticmethod
+    def __update_entry_text(entry, content):
+        """Update the view of the cell itself."""
+        entry.delete(0, tk.END)
+        entry.insert(0, content)
 
     def __get_cell_name(self, col_index: int, row_index: int) -> str:
         row_name: int = self.__row_index_to_name(row_index)
@@ -166,27 +167,34 @@ class SheetVisualizer:
         When this method runs, the entry has focus-in, so it shows the content and not the evaluation of the cell.
         Therefore, getting the current content of the entry while typing, should always provide the raw text content.
         """
-        self.current_value_label.config(text=f"Content: {entry.get()}")
+        self.__update_current_cell_text_view(entry.get())
 
-    def __focus_out_cell(self, row_index: int, col_index: int):
+    def __update_current_cell_text_view(self, content):
+        """Update the label of the current cell content in the head of the view."""
+        self.current_value_label.config(text=f"Content: {content}")
+
+    def __focus_out_cell(self, entry: tk.Entry, row_index: int, col_index: int):
         self.__clear_current_cell_header_view()
-        self.__store_and_evaluate_cell(row_index, col_index)
+        self.__store_and_evaluate_cell(entry, row_index, col_index)
 
     def __clear_current_cell_header_view(self):
         self.current_cell_label.config(text=self.__CURRENT_CELL_DEFAULT_STRING)
         self.current_value_label.config(text=self.__CURRENT_CELL_DEFAULT_STRING)
 
-    def __store_and_evaluate_cell(self, row_index: int, col_index: int):
-        current_cell_val = self.__get_current_cell_value()
-        cell: Optional[Cell] = self.sheet.get_cell(row_index, col_index)
-        if cell is not None:
-            # todo - check the success and update the updated cells in the ui.
-            success, locations_to_updated_values = self.sheet.try_update(self.current_cell_position, current_cell_val)
-            if success:
-                for (row, col), value in locations_to_updated_values.items():
-                    entry = self.__sheet_entries[row][col]  # todo - validate loc in range.
-                    entry.delete(0, tk.END)
-                    entry.insert(0, str(value))
-            else:
-                pass
-                # TODO - handle error
+    def __store_and_evaluate_cell(self, entry: tk.Entry, row_index: int, col_index: int):
+        """
+        todo - check the success and update the updated cells in the ui.
+        """
+        written_content: str = entry.get()
+        success, locations_to_updated_values = self.sheet.try_update(row_index, col_index, written_content)
+        if success:
+            for (row_index, col_index), value in locations_to_updated_values.items():
+                entry = self.__sheet_entries[row_index][col_index]  # todo - validate loc in range.
+                entry.delete(0, tk.END)
+                entry.insert(0, str(value))
+        else:
+            self.handle_errors()
+
+    def handle_errors(self):
+        # TODO - handle error
+        pass

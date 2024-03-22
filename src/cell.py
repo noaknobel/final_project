@@ -1,9 +1,12 @@
 from typing import Union
 
+from node import Node
+
 
 class Cell:
-    def __init__(self, cell_content: str):
+    def __init__(self, cell_content: str, parsed_content: Union[str, float, Node]):
         self.__content: str = cell_content
+        self.__parsed_content: Union[str, float, Node] = parsed_content
 
     def get_content(self) -> str:
         """
@@ -11,9 +14,5 @@ class Cell:
         """
         return self.__content
 
-    def get_value(self) -> Union[str, float]:
-        """
-        Computes the value of the cell content and return a float value of the result.
-        If the cell content can't be estimated as a float, return the string content itself.
-        """
-        return self.__content
+    def get_parsed_content(self) -> Union[str, float, Node]:
+        return self.__parsed_content
