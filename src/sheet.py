@@ -9,6 +9,11 @@ from expression_parser import ExpressionParser
 Position = Tuple[int, int]  # (Row Index, Column Index)
 
 
+class EvaluationException(Exception):
+    # TODO - make an exceptions module.
+    pass
+
+
 class Sheet:
     __EQUATION_PREFIX = "="
     # Column names consts.
@@ -21,8 +26,11 @@ class Sheet:
         self.__rows_num: int = rows_number
         self.__columns_num: int = columns_number
         self.__cells: Dict[Position, Cell] = {}  # Dictionary to store cells with their coordinates
+        pattern_str = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=self.__COLUMN_PATTERN_GROUP,
+                                                                       row=self.__ROW_PATTERN_GROUP)
+        self.__CELL_PATTERN = re.compile(pattern_str)
         self.__cell_name_pattern: re.Pattern = \
-            re.compile(rf'^(?P<{self.__COLUMN_PATTERN_GROUP}>[A-Z]+)(?P<{self.__ROW_PATTERN_GROUP}>[0-9]+)$')
+            re.compile(fr"^(?P<{self.__COLUMN_PATTERN_GROUP}>[A-Z]+)(?P<{self.__ROW_PATTERN_GROUP}>[0-9]+)$")
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                                          var_pattern=self.__cell_name_pattern)
 
@@ -110,10 +118,10 @@ class Sheet:
         Recursively evaluates the syntax tree from the given node.
         :param node: Root of the syntax tree to evaluate.
         :return: Evaluated result as a float.
-        :raises ParserException: If the provided node is None or if evaluation fails due to invalid structure.
+        :raises EvaluationException: If the provided node is None or if evaluation fails due to invalid structure.
         """
         if node is None:
-            raise Exception("Empty expression.")
+            raise EvaluationException("Empty expression.")
         if node.is_leaf():
             return self.__evaluate_leaf_node(node)
         return self.__evaluate_internal_node(node)
@@ -123,54 +131,55 @@ class Sheet:
         Evaluates a leaf node.
         :param node: The leaf node to evaluate.
         :return: The numerical value associated with the leaf node.
-        :raises ParserException: If the leaf node contains an invalid value.
+        :raises EvaluationException: If the leaf node contains an invalid value.
         """
         if isinstance(node.value, float):
             return node.value
         elif isinstance(node.value, str):
             return self.__get_cell_value(node.value)
         else:
-            raise Exception(f"Invalid leaf value: {node.value}")
+            raise EvaluationException(f"Invalid leaf value: {node.value}")
+
+    def __get_cell_value(self, cell_location: str) -> float:
+        row_index, column_index = self.__cell_name_to_location(cell_location)  # TODO - handle exception raised here.
+        value: Optional[float, str] = self.evaluate_position(row_index, column_index)
+        if value is None:
+            raise EvaluationException("Cell does not contain a value.")
+        if isinstance(value, (float, int)):
+            return value
+        raise EvaluationException("Cell contains unexpected value type.")
 
     def __evaluate_internal_node(self, node: Node) -> float:
         """
         Evaluates an internal (non-leaf) node.
         :param node: The internal node to evaluate.
         :return: The result of evaluating the operation represented by the node.
-        :raises ParserException: If the node contains an unsupported value or operation.
+        :raises EvaluationException: If the node contains an unsupported value or operation.
         """
         if not isinstance(node.value, MathOperator):
-            raise Exception(f"Unsupported node value: {node.value}")
+            raise EvaluationException(f"Unsupported node value: {node.value}")
         left_val = self.__evaluate(node.left) if node.left else None
         right_val = self.__evaluate(node.right) if node.right else None
         if isinstance(node.value, UnaryOperator):
             if right_val is None:
-                raise Exception("Missing operand for unary operator.")
+                raise EvaluationException("Missing operand for unary operator.")
             return node.value.calculate(right_val)
         elif isinstance(node.value, BinaryOperator):
             if left_val is None or right_val is None:
-                raise Exception("Missing operands for binary operator.")
+                raise EvaluationException("Missing operands for binary operator.")
             return node.value.calculate(left_val, right_val)
         else:
-            raise Exception(f"Unsupported operator type: {type(node.value)}")
+            raise EvaluationException(f"Unsupported operator type: {type(node.value)}")
 
-    def __get_cell_value(self, cell_location: str) -> float:
-        row_index, column_index = self.cell_name_to_location(cell_location)  # TODO - handle exception raised here.
-        value: Optional[float, str] = self.evaluate_position(row_index, column_index)
-        if value is None:
-            raise Exception("Cell does not contain a value.")
-        if isinstance(value, (float, int)):
-            return value
-        raise Exception("Cell contains unexpected value type.")
-
-    def cell_name_to_location(self, cell_name: str) -> (int, int):
+    def __cell_name_to_location(self, cell_name: str) -> (int, int):
         """
         Convert a cell name (like 'A1', 'B2', etc.) to its corresponding row and column indices.
+        :raises EvaluationException: If the cell name does not match the regular expression.
         :return: A tuple of a row index followed by a column index.
         """
         match = self.__cell_name_pattern.match(cell_name)
         if not match:
-            raise ValueError(f"Invalid cell name format: {cell_name}")  # TODO - maybe create an EvaluationException.
+            raise EvaluationException(f"Invalid cell name format: {cell_name}")
         # Accessing named groups directly for better readability
         column_part = match.group(self.__COLUMN_PATTERN_GROUP)
         row_part = match.group(self.__ROW_PATTERN_GROUP)
