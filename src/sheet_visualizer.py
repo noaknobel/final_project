@@ -57,12 +57,12 @@ class SheetVisualizer:
         """
         # Add Excel-like column labels.
         for col_index in range(self.sheet.get_columns_number()):
-            col_label = tk.Label(self.root, text=self.__column_index_to_name(col_index), font=self.__FONT,
+            col_label = tk.Label(self.root, text=self.sheet.column_index_to_name(col_index), font=self.__FONT,
                                  fg=self.__COLOR)
             col_label.grid(row=self.__COLUMN_NAMES_ROW, column=col_index + self.__FIRST_COLUMN_NAME_INDEX)
         # Add column of row indexes.
         for row_index in range(self.sheet.get_rows_number()):
-            row_name = self.__row_index_to_name(row_index)  # Row numbers start with 1.
+            row_name = self.sheet.row_index_to_name(row_index)  # Row numbers start with 1.
             index_label = tk.Label(self.root, text=str(row_name), font=self.__FONT, fg=self.__COLOR)
             index_label.grid(row=row_index + self.__FIRST_SPREADSHEET_ROW, column=self.__ROW_INDEX_COLUMN)
 
@@ -77,7 +77,7 @@ class SheetVisualizer:
         # Add a save button
         save_button = tk.Button(self.root, text="Save", command=self.__save_changes)
         save_button.grid(row=self.__SPREADSHEET_NAME_ROW, column=1, pady=5, sticky="w")
-        column_span_length = self.__row_index_to_name(self.sheet.get_columns_number())
+        column_span_length = self.sheet.get_columns_number() + 1
         # Add label "Sheet name:"
         sheet_name_label = tk.Label(self.root, text=self.__USER_NAME_LABEL, font=self.__FONT)
         sheet_name_label.grid(row=self.__SPREADSHEET_USER_NAME_ROW, column=1, pady=5, sticky="e")
@@ -111,25 +111,6 @@ class SheetVisualizer:
                 entry.grid(row=row_index + self.__FIRST_SPREADSHEET_ROW,
                            column=col_index + self.__FIRST_COLUMN_NAME_INDEX)
 
-    @staticmethod
-    def __row_index_to_name(row_index: int) -> str:
-        """
-        A string label representing the row, starting with "1" in the 0 index.
-        """
-        return str(row_index + 1)
-
-    @classmethod
-    def __column_index_to_name(cls, col_index: int) -> str:
-        """
-        A string label representing the column, starting with "A".
-        """
-        # TODO - check this running main with a larger sheet.
-        name = ""
-        while col_index >= 0:
-            name += chr(col_index % cls.__NUMBER_OF_LETTERS + cls.__A_ASCII)
-            col_index = col_index // cls.__NUMBER_OF_LETTERS - 1
-        return name
-
     def __bind_entry_events(self, entry: tk.Entry, row_index: int, col_index: int):
         """
         Binds specific callback methods to entry widget events, managing GUI interactions based on user input.
@@ -157,8 +138,8 @@ class SheetVisualizer:
         entry.insert(0, content)
 
     def __get_cell_name(self, col_index: int, row_index: int) -> str:
-        row_name: int = self.__row_index_to_name(row_index)
-        col_name: str = self.__column_index_to_name(col_index)
+        row_name: int = self.sheet.row_index_to_name(row_index)
+        col_name: str = self.sheet.column_index_to_name(col_index)
         return f"{col_name}{row_name}"
 
     def __key_write_entry(self, entry: tk.Entry):

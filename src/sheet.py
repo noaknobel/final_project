@@ -98,8 +98,7 @@ class Sheet:
         """TODO Handle error cases."""
         return self.__parser.syntax_tree(content)
 
-    @classmethod
-    def __evaluate(cls, node: Optional[Node]) -> float:
+    def __evaluate(self, node: Optional[Node]) -> float:
         """
         Recursively evaluates the syntax tree from the given node.
         :param node: Root of the syntax tree to evaluate.
@@ -109,11 +108,10 @@ class Sheet:
         if node is None:
             raise Exception("Empty expression.")
         if node.is_leaf():
-            return cls.__evaluate_leaf_node(node)
-        return cls.__evaluate_internal_node(node)
+            return self.__evaluate_leaf_node(node)
+        return self.__evaluate_internal_node(node)
 
-    @classmethod
-    def __evaluate_leaf_node(cls, node: Node) -> float:
+    def __evaluate_leaf_node(self, node: Node) -> float:
         """
         Evaluates a leaf node.
         :param node: The leaf node to evaluate.
@@ -123,12 +121,11 @@ class Sheet:
         if isinstance(node.value, float):
             return node.value
         elif isinstance(node.value, str):
-            return cls.__get_cell_value(node.value)
+            return self.__get_cell_value(node.value)
         else:
             raise Exception(f"Invalid leaf value: {node.value}")
 
-    @classmethod
-    def __evaluate_internal_node(cls, node: Node) -> float:
+    def __evaluate_internal_node(self, node: Node) -> float:
         """
         Evaluates an internal (non-leaf) node.
         :param node: The internal node to evaluate.
@@ -137,8 +134,8 @@ class Sheet:
         """
         if not isinstance(node.value, MathOperator):
             raise Exception(f"Unsupported node value: {node.value}")
-        left_val = cls.__evaluate(node.left) if node.left else None
-        right_val = cls.__evaluate(node.right) if node.right else None
+        left_val = self.__evaluate(node.left) if node.left else None
+        right_val = self.__evaluate(node.right) if node.right else None
         if isinstance(node.value, UnaryOperator):
             if right_val is None:
                 raise Exception("Missing operand for unary operator.")
@@ -150,6 +147,25 @@ class Sheet:
         else:
             raise Exception(f"Unsupported operator type: {type(node.value)}")
 
-    @classmethod
-    def __get_cell_value(cls, cell_location: str) -> float:
+    def __get_cell_value(self, cell_location: str) -> float:
+        # self.__cells[loc] = cell
         return float(2)  # TODO
+
+    @staticmethod
+    def row_index_to_name(row_index: int) -> str:
+        """
+        A string label representing the row, starting with "1" in the 0 index.
+        """
+        return str(row_index + 1)
+
+    @classmethod
+    def column_index_to_name(cls, col_index: int) -> str:
+        """
+        A string label representing the column, starting with "A".
+        """
+        # TODO - check this running main with a larger sheet.
+        name = ""
+        while col_index >= 0:
+            name += chr(col_index % cls.__NUMBER_OF_LETTERS + cls.__A_ASCII)
+            col_index = col_index // cls.__NUMBER_OF_LETTERS - 1
+        return name
