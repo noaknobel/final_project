@@ -151,76 +151,88 @@ class ExpressionParser:
         """
         if not tokens:
             raise ParserException("List of tokens is empty.")
-        tokens_postfix: List[Union[MathOperator, str]] = []
+        tokens_postfix: List[Union[MathOperator, str]] = []  # The returned tokens in a postfix order.
         operators_stack: list[Union[MathOperator, str]] = []  # Stores Operator instances, and parentheses strings.
-        is_previous_character_operand = False
-        tokens = [token for token in tokens if not token.isspace()]
-
+        tokens = [token for token in tokens if not token.isspace()]  # Filter spaces from the tokens list.
+        # Initializing state of previous token.
+        is_prev_operand = False
+        is_prev_open_bracket = False
+        # Updating the postfix tokens list and the operator stack for each given token.
         for token in tokens:
-            is_previous_character_operand = self.__process_token_postfix(token, operators_stack, tokens_postfix,
-                                                                         is_previous_character_operand)
-
+            is_prev_operand, is_prev_open_bracket = self.__process_token_postfix(token, operators_stack, tokens_postfix,
+                                                                                 is_prev_operand, is_prev_open_bracket)
+        # Handling the remaining tokens in the stack.
         while operators_stack:
-            tokens_postfix.append(operators_stack.pop())
-
-        if not is_previous_character_operand:
+            operator: Union[MathOperator, str] = operators_stack.pop()
+            if isinstance(operator, str) and self.__is_bracket(operator):
+                raise ParserException("Operator stack should not contain any brackets at this point!")
+            tokens_postfix.append(operator)
+        if not is_prev_operand:
             raise ParserException("The expression must end with an operand.")
         return tokens_postfix
 
     def __process_token_postfix(self, token: str, operators_stack: List[str],
                                 tokens_postfix: List[Union[str, MathOperator]],
-                                is_previous_character_operand: bool) -> bool:
+                                is_previous_token_operand: bool, is_previous_token_open_bracket: bool) -> (bool, bool):
         """
         Processes a single token in the postfix logic.
         :param token: The current token from the expression.
         :param operators_stack: A stack (implemented as a list) holding operators and parentheses during conversion.
         :param tokens_postfix: The list accumulating the postfix representation tokens.
-        :param is_previous_character_operand: Flag indicating if the preceding token in the sequence was an operand.
-        :return: Returns True if the processed token is an operand, otherwise False.
+        :param is_previous_token_operand: Flag indicating if the preceding token in the sequence was an operand.
+        :param is_previous_token_open_bracket: Flag indicating if the preceding token was an open bracket.
+        :return: 2 bool variables that indicate whether the current token is an operand (or a close bracket of an
+            operand), and whether the current token is an open bracket.
+            These flags are returned so that the next iteration is aware of the previous token state.
         :raises ParserException: Whether the token's arrangement breaks rules.
         """
         if self.__is_open_bracket(token):
-            if is_previous_character_operand:
+            if is_previous_token_operand:
                 raise ParserException("An open bracket cannot directly follow an operand.")
             operators_stack.append(token)
-            return False
+            return False, True
         if self.__is_close_bracket(token):
-            self.__handle_close_bracket(operators_stack, tokens_postfix)
-            return True
+            if is_previous_token_open_bracket:
+                raise ParserException("Empty brackets are not allowed")
+            self.__handle_close_bracket(token, operators_stack, tokens_postfix)
+            return True, False
         if self.__is_operator(token):
-            operator = self.__find_operator(token, is_previous_character_operand)
+            operator = self.__find_operator(token, is_previous_token_operand)
             if operator is None:
                 raise ParserException("Invalid operator in expression.")
             self.__handle_operator(operator, operators_stack, tokens_postfix)
-            return False
+            return False, False
         if self.__is_number(token):
-            if is_previous_character_operand:
+            if is_previous_token_operand:
                 raise ParserException("Cannot have two operands in a row.")
             tokens_postfix.append(float(token))
-            return True
+            return True, False
         if self.__is_location(token):
-            if is_previous_character_operand:
+            if is_previous_token_operand:
                 raise ParserException("Cannot have two operands in a row.")
             tokens_postfix.append(token)
-            return True
+            return True, False
         raise ParserException(f"Invalid token in expression: {token}")
 
-    def __handle_close_bracket(self, operators_stack: List[Union[MathOperator, str]],
+    def __handle_close_bracket(self, close_bracket: str, operators_stack: List[Union[MathOperator, str]],
                                tokens_postfix: List[Union[MathOperator, str]]) -> None:
         """
         Handles the logic when a closing bracket is encountered during the conversion of an expression to postfix
         notation.
+        :param close_bracket: A close bracket token string.
         :param operators_stack: The stack currently storing operators and open brackets.
         :param tokens_postfix: The current postfix token list being constructed.
         :raises ParserException: If there is a mismatched parenthesis.
         """
-        while operators_stack:
-            top = operators_stack.pop()
-            if self.__is_open_bracket(top):
-                break
-            tokens_postfix.append(top)
-        else:  # This else corresponds to the while, it executes if no break occurs (no open bracket found)
+        current_brackets_remaining_operators = []
+        while operators_stack and not self.__is_open_bracket(operators_stack[-1]):
+            current_brackets_remaining_operators.append(operators_stack.pop())
+        if len(operators_stack) == 0:
+            raise ParserException("No open bracket found.")
+        open_bracket = operators_stack.pop()
+        if not self.__are_parentheses_pairs(open_bracket, close_bracket):
             raise ParserException("Mismatched parentheses in expression.")
+        tokens_postfix.extend(current_brackets_remaining_operators)
 
     def __handle_operator(self, operator: MathOperator, operators_stack: List[Union[MathOperator, str]],
                           tokens_postfix: List[Union[MathOperator, str]]) -> None:
@@ -256,8 +268,9 @@ class ExpressionParser:
         :raises ParserException: If the expression is invalid or cannot be parsed into a valid syntax tree.
         """
         tokens = self.__tokenize(expression)
-        # TODO - note - "(" without ")" won't raise error inside __postfix.
         postfix: List[Union[str, MathOperator]] = self.__postfix(tokens)
+        if len(postfix) == 0:
+            raise ParserException("Postfix list is empty!")
         stack = []
         for token in postfix:
             node = Node(token)
