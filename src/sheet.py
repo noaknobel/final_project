@@ -11,13 +11,20 @@ Position = Tuple[int, int]  # (Row Index, Column Index)
 
 class Sheet:
     __EQUATION_PREFIX = "="
+    # Column names consts.
+    __NUMBER_OF_LETTERS = 26
+    __A_ASCII = 65
+    __COLUMN_PATTERN_GROUP = "column"
+    __ROW_PATTERN_GROUP = "row"
 
     def __init__(self, rows_number: int, columns_number: int):
         self.__rows_num: int = rows_number
         self.__columns_num: int = columns_number
         self.__cells: Dict[Position, Cell] = {}  # Dictionary to store cells with their coordinates
+        self.__cell_name_pattern: re.Pattern = \
+            re.compile(rf'^(?P<{self.__COLUMN_PATTERN_GROUP}>[A-Z]+)(?P<{self.__ROW_PATTERN_GROUP}>[0-9]+)$')
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
-                                         var_pattern=re.compile(r'^[A-Z]+[0-9]+$'))
+                                         var_pattern=self.__cell_name_pattern)
 
     def get_rows_number(self) -> int:
         return self.__rows_num
@@ -36,7 +43,7 @@ class Sheet:
             return None
         return cell.get_content()
 
-    def evaluate_position(self, row_index: int, column_index: int) -> Union[str, float]:
+    def evaluate_position(self, row_index: int, column_index: int) -> Optional[Union[str, float]]:
         """Get the estimated value of the cell."""
         cell = self.__get_cell(row_index, column_index)
         if cell is None:
@@ -148,8 +155,32 @@ class Sheet:
             raise Exception(f"Unsupported operator type: {type(node.value)}")
 
     def __get_cell_value(self, cell_location: str) -> float:
-        # self.__cells[loc] = cell
-        return float(2)  # TODO
+        row_index, column_index = self.cell_name_to_location(cell_location)  # TODO - handle exception raised here.
+        value: Optional[float, str] = self.evaluate_position(row_index, column_index)
+        if value is None:
+            raise Exception("Cell does not contain a value.")
+        if isinstance(value, (float, int)):
+            return value
+        raise Exception("Cell contains unexpected value type.")
+
+    def cell_name_to_location(self, cell_name: str) -> (int, int):
+        """
+        Convert a cell name (like 'A1', 'B2', etc.) to its corresponding row and column indices.
+        :return: A tuple of a row index followed by a column index.
+        """
+        match = self.__cell_name_pattern.match(cell_name)
+        if not match:
+            raise ValueError(f"Invalid cell name format: {cell_name}")  # TODO - maybe create an EvaluationException.
+        # Accessing named groups directly for better readability
+        column_part = match.group(self.__COLUMN_PATTERN_GROUP)
+        row_part = match.group(self.__ROW_PATTERN_GROUP)
+        # Compute Ascii value of each letter in the column name.
+        column_ascii_list = [(ord(char) - self.__A_ASCII) for char in column_part]
+        column_index = sum([char_index * self.__NUMBER_OF_LETTERS + char_ascii
+                            for (char_index, char_ascii) in enumerate(column_ascii_list)])
+        # Subtract one from row index to start from 0, and convert row_part from string to integer
+        row_index = int(row_part) - 1
+        return row_index, column_index
 
     @staticmethod
     def row_index_to_name(row_index: int) -> str:

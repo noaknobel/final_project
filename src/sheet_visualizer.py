@@ -2,7 +2,7 @@ import tkinter as tk
 from typing import Optional, List, Union
 
 # TODO - think how to remove direct access to cell here, and use it only through sheet's api,
-#  or - separate the visual cell class from evaltion and logic class.
+#  or - separate the visual cell class from evaluation and logic class.
 from sheet import Sheet
 
 
@@ -25,9 +25,6 @@ class SheetVisualizer:
     # Column indexes.
     __ROW_INDEX_COLUMN = 0
     __FIRST_COLUMN_NAME_INDEX = 1
-    # Column names consts.
-    __NUMBER_OF_LETTERS = 26
-    __A_ASCII = 65
 
     def __init__(self, sheet):
         self.sheet: Sheet = sheet
@@ -96,7 +93,8 @@ class SheetVisualizer:
     def __add_gui_sheet_table_cells(self) -> None:
         """
         Adds the sheet matrix to the GUI.
-        Initializes the entries matrix, enters the current state values to the view, and bind each entry to GUI events.
+        Initializes the matrix of entries, enters the current state values to the view,
+         and bind each entry to GUI events.
         """
         self.__sheet_entries: List[List[tk.Entry]] = [
             [tk.Entry(self.root, width=10, font=self.__FONT) for _ in range(self.sheet.get_columns_number())]
