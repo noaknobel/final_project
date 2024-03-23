@@ -25,6 +25,7 @@ class Sheet:
     def __init__(self, rows_number: int, columns_number: int):
         self.__rows_num: int = rows_number
         self.__columns_num: int = columns_number
+        # TODO - if a cell gets deleted, do not store an empty string.
         self.__cells: Dict[Position, Cell] = {}  # Dictionary to store cells with their coordinates
         pattern_str = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=self.__COLUMN_PATTERN_GROUP,
                                                                        row=self.__ROW_PATTERN_GROUP)
