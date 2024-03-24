@@ -1,13 +1,9 @@
 import re
 from typing import Optional, List, Union
 
+from exceptions import ParserException
 from math_operator import MathOperator, UnaryOperator, BinaryOperator, Associativity
 from node import Node
-
-
-class ParserException(Exception):
-    """An exception caused by the parsing logic."""
-    pass
 
 
 class ExpressionParser:

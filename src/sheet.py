@@ -1,28 +1,24 @@
 import re
 from enum import Enum, auto
 from typing import Dict, Tuple, Union, Optional, List, Set
+
 import networkx as nx
+
 from cell import Cell
+from exceptions import EvaluationException, CircularDependenciesException
+from expression_parser import ExpressionParser
 from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator
 from node import Node
-from expression_parser import ExpressionParser
-
-Position = Tuple[int, int]  # (Row Index, Column Index)
-
-
-class EvaluationException(Exception):
-    # TODO - make an exceptions module.
-    pass
-
-
-class CircularDependenciesException(Exception):
-    # TODO - make an exceptions module.
-    pass
 
 
 class ErrorType(Enum):
     VALUE_ERROR = auto()
     NAME_ERROR = auto()
+
+
+Position = Tuple[int, int]  # (Row Index, Column Index)
+Content = Union[str, float, Node]
+Value = Union[str, float, ErrorType]
 
 
 class Sheet:
@@ -47,8 +43,10 @@ class Sheet:
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                                          var_pattern=self.__cell_name_pattern)
         self.__dependencies_graph = nx.DiGraph()
-        self.__cells_values_cache: Dict[Position, Union[str, float, ErrorType]] = {}
-
+        # TODO - consider removing __cells_values_cache.
+        #  Is it used at all? during evaluation of the dependencies themself,
+        #  even if its in the cache we check the runtime check and recompute if not there.
+        self.__cells_values_cache: Dict[Position, Value] = {}
 
     def get_rows_number(self) -> int:
         return self.__rows_num
@@ -58,14 +56,10 @@ class Sheet:
 
     def get_cell_content(self, row_index: int, column_index: int) -> Optional[str]:
         """Get the content of the cell."""
-        cell = self.__get_cell(row_index, column_index)
+        cell = self.__cells.get((row_index, column_index))
         if cell is None:
             return None
         return cell.get_content()
-
-    def __get_cell(self, row_index: int, column_index: int) -> Optional[Cell]:
-        """Retrieve the cell object for the given row and column indexes."""
-        return self.__cells.get((row_index, column_index))
 
     @staticmethod
     def row_index_to_name(row_index: int) -> str:
@@ -86,34 +80,43 @@ class Sheet:
             col_index = col_index // cls.__NUMBER_OF_LETTERS - 1
         return name
 
-    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool, Dict[Position,
-                                                                                                   Union[str, float]]]:
+    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool, Dict[Position, Value]]:
         """
         TODO if formula - handle + handle exceptions.
         TODO - edge cases: Evaluation error, dependencies loop, str dep, dependents re-eval (and ruining), dependency
             with no value, Validate locations pattern and range valid.
         """
-        current_position: Position = (row_index, col_index)
-        parsed_content: Union[str, float, Node] = self.__parse_content(written_content)
-        if isinstance(parsed_content, Node):
-            new_dependency_graph, dependencies_evaluation_order, dependents_update_order = \
-                self.__try_update_dependency_graph(current_position, parsed_content)
-            # Depending on your next actions, you might need to do something with these new variables.
-            # This example just returns them for the sake of consistency with your original structure.
-            return True, {}  # Adjust according to how you want to use the new_dependency_graph and orders
-        cell: Cell = Cell(written_content, parsed_content, )
+        try:
+            current_position: Position = (row_index, col_index)
+            parsed_content: Content = self.__parse_content(written_content)
 
-        value: Union[str, float] = self.__evaluate_cell(cell)
-        loc = (row_index, col_index)
-        updated_cells = {loc: value}
-        success = True
-        if success:
-            self.__cells[loc] = cell
-            print("AAA", {k: self.__evaluate_cell(v) for k, v in self.__cells.items()})  # todo - remove
-            return True, updated_cells
-        return False, {}
+            # Compute dependents to update, and validate no cycles in the dependency graph.
+            updated_position_dependencies = set()
+            if isinstance(parsed_content, Node):
+                cell_names: List[str] = self.__get_string_nodes(parsed_content)
+                # Raises EvaluationException if a cell name cannot be converted to a position. TODO - handle.
+                updated_position_dependencies: Set[Position] = {self.__cell_name_to_location(d) for d in cell_names}
+            new_dependency_graph: nx.DiGraph = self.__get_updated_graph(current_position, updated_position_dependencies)
+            dependents_to_reevaluate: List[Position] = self.__compute_dependencies(current_position,
+                                                                                   new_dependency_graph)
+            # TODO try-except evaluation errors.
+            cache = {}  # Initialize an empty cache.
+            updated_positions: Dict[Position, Value] = {
+                current_position: self.__evaluate_content(current_position, parsed_content, cache)}
+            # Evaluating according to the graph order.
+            for position in dependents_to_reevaluate:
+                updated_positions[position] = self.__evaluate_position(position, cache)
+            # If success - update the state of the dependency graph and the values cache.
+            self.__cells[current_position] = Cell(written_content, parsed_content)
+            self.__dependencies_graph = new_dependency_graph
+            self.__cells_values_cache.update(updated_positions)
+            return True, updated_positions
+        except Exception as e:
+            print(f"An error occurred!: {e}")  # TODO - handle.
+            raise
+            return False, {}
 
-    def __parse_content(self, cell_content) -> Union[str, float, Node]:
+    def __parse_content(self, cell_content) -> Content:
         number_result: Optional[float] = self.__try_parse_number(cell_content)
         if number_result is not None:
             return number_result
@@ -137,27 +140,13 @@ class Sheet:
         """TODO Handle error cases."""
         return self.__parser.syntax_tree(content)
 
-    def __try_update_dependency_graph(self, current_position: Position, node: Node) -> Tuple[nx.DiGraph,
-                                                                                             List[Position],
-                                                                                             List[Position]]:
-        """
-        Return an updated graph with the dependencies of the new node at the given position,
-        and dependencies and dependents of the position according to the graph order.
-        """
-        dependencies_cell_names = self.__get_string_nodes(node)
-        # Raises EvaluationException if a cell name cannot be converted to a position. TODO - handle.
-        current_dependencies: Set[Position] = {self.__cell_name_to_location(d) for d in dependencies_cell_names}
-        # Create edges that map from the current position to the dependencies position.
-        new_dependency_graph = self.__get_updated_graph(current_position, current_dependencies)
-        return self.__compute_dependencies(new_dependency_graph, current_position)
-
     @staticmethod
-    def __get_string_nodes(node: Node) -> List[Node]:
+    def __get_string_nodes(node: Node) -> List[str]:
         """
         Collects all nodes in the tree where the value is of type str.
         :return: A list of Nodes with string values.
         """
-        return [node for node in node.dfs() if isinstance(node.value, str)]
+        return [node.value for node in node.dfs() if isinstance(node.value, str)]
 
     def __cell_name_to_location(self, cell_name: str) -> Position:
         """
@@ -179,112 +168,115 @@ class Sheet:
         row_index = int(row_part) - 1
         return row_index, column_index
 
-    def __get_updated_graph(self, position: Position, position_dependencies: Set[Position]) -> nx.DiGraph:
+    def __get_updated_graph(self, position: Position,
+                            position_dependencies: Optional[Set[Position]] = None) -> nx.DiGraph:
         """
         Return an updated graph with the new dependencies of the given position.
+        If the position_dependencies is not given, the position is updated to have no dependencies (e.g. float cell).
         """
-        updated_edges: Set[(Position, Position)] = {(position, d) for d in position_dependencies}
+        updated_edges: Set[(Position, Position)] = \
+            {(position, d) for d in position_dependencies} if position_dependencies is not None else set()
         # I edit a copy of the graph, so if there's an error I could revert to the original graph easily.
         new_dependency_graph: nx.DiGraph = self.__dependencies_graph.copy()
         # Update new dependencies and remove deleted dependencies from the temporary graph.
-        existing_edges: Set[(Position, Position)] = set(self.__dependencies_graph.edges())
-        new_dependency_graph.remove_edges_from(existing_edges - updated_edges)
+        new_dependency_graph.remove_edges_from(list(new_dependency_graph.out_edges(position)))
         new_dependency_graph.add_edges_from(updated_edges)
+        # Find all isolated items (nodes with no edges) and remove them, since they no longer have any meaning.
+        isolated_items = list(nx.isolates(new_dependency_graph))
+        new_dependency_graph.remove_edges_from(isolated_items)
         return new_dependency_graph
 
     @staticmethod
-    def __compute_dependencies(dependency_graph: nx.DiGraph, current_position: Position) -> (List[Position],
-                                                                                             List[Position]):
+    def __compute_dependencies(current_position: Position, dependency_graph: nx.DiGraph) -> List[Position]:
         """
         Attempt a topological sort to check for cycles in the graph.
         For further details on the algorithm, I recommend the following explanation:
         https://www.youtube.com/watch?v=WqV-pxNUAYA.
         :raises CircularDependenciesException: If there is a cycle in the graph.
         :return: The list of dependencies to evaluate in order to estimate the current position,
-        and a list of the positions that are dependent on the current position, according to the topoligical sort order.
+        and a list of the positions that are dependent on the current position, according to the topological-sort order.
+        The returned list does not contain the current position itself.
         """
         try:
+            # If there is a cycle in the graph, an exception is raised here.
             total_order = list(nx.topological_sort(dependency_graph))
-            dependencies_of_current: Set[Position] = nx.descendants(dependency_graph, current_position)
-            dependencies_evaluation_order: List[Position] = [node for node in total_order if
-                                                             node in dependencies_of_current]
             # Derive dependents_update_order by using the reversed graph's total order.
-            reachable_from_current_in_reversed = nx.descendants(dependency_graph.reverse(), current_position)
-            dependents_update_order: List[Position] = [node for node in reversed(total_order) if
-                                                       node in reachable_from_current_in_reversed]
-            return dependencies_evaluation_order, dependents_update_order
+            if current_position in dependency_graph:
+                reachable_from_current_in_reversed: Set[Position] = nx.descendants(dependency_graph.reverse(),
+                                                                                   current_position)
+                return [node for node in reversed(total_order) if node in reachable_from_current_in_reversed]
+            return []
         except nx.NetworkXUnfeasible:
             raise CircularDependenciesException("Cycle detected, new edges not added.")
 
-    # TODO - refactor the evaluation process!!!
+    def __evaluate_position(self, position: Position, cache: Dict[Position, Value]) -> Value:
+        # Attempt to fetch the value from the local cache first.
+        if position in cache:
+            return cache[position]
 
-    def __evaluate_cell(self, cell: Cell) -> Union[str, float]:
-        # TODO - update to loop at deps, recursively.
-        parsed_content: Union[str, float, Node] = cell.get_parsed_content()
-        return self.__evaluate(parsed_content) if isinstance(parsed_content, Node) else parsed_content
+        # If the position is not cached anywhere, compute its value.
+        cell = self.__cells.get(position)
+        if not cell:
+            raise EvaluationException("Cell does not exist.")
+        parsed_content = cell.get_parsed_content()
+        return self.__evaluate_content(position, parsed_content, cache)
 
-    def __evaluate(self, node: Optional[Node]) -> float:
+    def __evaluate_content(self, position, parsed_content, cache):
+        value = self.__evaluate(parsed_content, cache) if isinstance(parsed_content, Node) else parsed_content
+        # Update the local cache but not the sheet-level cache yet.
+        cache[position] = value
+        return value
+
+    def __evaluate(self, node: Node, cache: Dict[Position, Value]) -> Value:
         """
-        # TODO - use dfs from node or some other method from node for the iteration.
-        Recursively evaluates the syntax tree from the given node.
-        :param node: Root of the syntax tree to evaluate.
-        :return: Evaluated result as a float.
-        :raises EvaluationException: If the provided node is None or if evaluation fails due to invalid structure.
+        Recursively evaluates the syntax tree from the given node, using and updating a cache.
         """
-        if node is None:
-            raise EvaluationException("Empty expression.")
+        # Evaluate leaf nodes directly.
         if node.is_leaf():
-            return self.__evaluate_leaf_node(node)
-        return self.__evaluate_internal_node(node)
+            return self.__evaluate_leaf_node(node, cache)
+        # Evaluate internal nodes.
+        return self.__evaluate_internal_node(node, cache)
 
-    def __evaluate_leaf_node(self, node: Node) -> float:
+    def __evaluate_leaf_node(self, node: Node, cache: Dict[Position, Value]) -> Value:
         """
-        Evaluates a leaf node.
-        :param node: The leaf node to evaluate.
-        :return: The numerical value associated with the leaf node.
-        :raises EvaluationException: If the leaf node contains an invalid value.
+        Evaluates a leaf node, using the cache for cell references.
         """
         if isinstance(node.value, float):
-            return node.value
-        elif isinstance(node.value, str):
-            return self.__get_cell_value(node.value)
-        else:
-            raise EvaluationException(f"Invalid leaf value: {node.value}")
+            return node.value  # Directly return the numerical value.
+        if isinstance(node.value, str):
+            # Convert cell reference to position and fetch its value, using the cache.
+            cell_position = self.__cell_name_to_location(node.value)
+            return self.__evaluate_position(cell_position, cache)
+        # If node's value isn't float or string, raise an exception.
+        raise EvaluationException(f"Invalid leaf value: {node.value}")
 
-    def __get_cell_value(self, cell_location: str) -> float:
-        row_index, column_index = self.__cell_name_to_location(cell_location)  # TODO - handle exception raised here.
-        value: Optional[float, str] = self.__evaluate_position(row_index, column_index)
+    def __evaluate_internal_node(self, node: Node, cache: Dict[Position, Value]) -> Value:
+        """
+        Evaluates an internal (non-leaf) node, using the cache to avoid redundant calculations.
+        """
+        if not isinstance(node.value, MathOperator):
+            raise EvaluationException(f"Unsupported node value: {node.value}")
+        # Retrieve values for left and right children if they exist.
+        left_val = self.__evaluate(node.left, cache) if node.left else None
+        right_val = self.__evaluate(node.right, cache) if node.right else None
+        # Handle unary and binary operations.
+        if isinstance(node.value, UnaryOperator):
+            if right_val is None:
+                raise EvaluationException("Missing operand for unary operator.")
+            return node.value.calculate(right_val)
+        if isinstance(node.value, BinaryOperator):
+            if left_val is None or right_val is None:
+                raise EvaluationException("Missing operands for binary operator.")
+            return node.value.calculate(left_val, right_val)
+        # If the node's operator type is neither unary nor binary, raise an exception.
+        raise EvaluationException(f"Unsupported operator type: {type(node.value)}")
+
+    def __get_cell_value(self, cell_location: str, cache: Dict[Position, Value]) -> Value:
+        position = self.__cell_name_to_location(cell_location)  # TODO - handle exception raised here.
+        # Use cache to get or evaluate the cell's value.
+        value = self.__evaluate_position(position, cache)
         if value is None:
             raise EvaluationException("Cell does not contain a value.")
         if isinstance(value, (float, int)):
             return value
         raise EvaluationException("Cell contains unexpected value type.")
-
-    def __evaluate_position(self, row_index: int, column_index: int) -> Optional[Union[str, float]]:
-        """Get the estimated value of the cell."""
-        cell = self.__get_cell(row_index, column_index)
-        if cell is None:
-            return None
-        return self.__evaluate_cell(cell)
-
-    def __evaluate_internal_node(self, node: Node) -> float:
-        """
-        Evaluates an internal (non-leaf) node.
-        :param node: The internal node to evaluate.
-        :return: The result of evaluating the operation represented by the node.
-        :raises EvaluationException: If the node contains an unsupported value or operation.
-        """
-        if not isinstance(node.value, MathOperator):
-            raise EvaluationException(f"Unsupported node value: {node.value}")
-        left_val = self.__evaluate(node.left) if node.left else None
-        right_val = self.__evaluate(node.right) if node.right else None
-        if isinstance(node.value, UnaryOperator):
-            if right_val is None:
-                raise EvaluationException("Missing operand for unary operator.")
-            return node.value.calculate(right_val)
-        elif isinstance(node.value, BinaryOperator):
-            if left_val is None or right_val is None:
-                raise EvaluationException("Missing operands for binary operator.")
-            return node.value.calculate(left_val, right_val)
-        else:
-            raise EvaluationException(f"Unsupported operator type: {type(node.value)}")

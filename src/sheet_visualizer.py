@@ -166,6 +166,7 @@ class SheetVisualizer:
         todo - check the success and update the updated cells in the ui.
         """
         written_content: str = entry.get()
+        # TODO - handle value of type ErrorType. Also pass that type from try_update according to the error.
         success, locations_to_updated_values = self.sheet.try_update(row_index, col_index, written_content)
         if success:
             for (row_index, col_index), value in locations_to_updated_values.items():
