@@ -1,5 +1,5 @@
 import tkinter as tk
-from typing import Optional, List, Union
+from typing import Optional, List
 
 # TODO - think how to remove direct access to cell here, and use it only through sheet's api,
 #  or - separate the visual cell class from evaluation and logic class.
@@ -103,8 +103,8 @@ class SheetVisualizer:
         for row_index, entries_row in enumerate(self.__sheet_entries):
             for col_index, entry in enumerate(entries_row):
                 # TODO - Change to "evaluate all" method, that also validate ok input json.
-                value: Optional[Union[str, float]] = self.sheet.evaluate_position(row_index, col_index)
-                entry.insert(tk.END, value if value is not None else "")  # TODO - check.
+                #  value: Optional[Union[str, float]] = self.sheet.evaluate_position(row_index, col_index)
+                #  entry.insert(tk.END, value if value is not None else "")  # check this.
                 self.__bind_entry_events(entry, row_index, col_index)
                 # Add the entry to the table view.
                 entry.grid(row=row_index + self.__FIRST_SPREADSHEET_ROW,
