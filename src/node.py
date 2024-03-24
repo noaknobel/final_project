@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Union, Generator
 
 from math_operator import MathOperator
 
@@ -23,3 +23,15 @@ class Node:
         :return: True if the node is a leaf, False otherwise.
         """
         return self.left is None and self.right is None
+
+    def dfs(self) -> Generator["Node", None, None]:
+        """
+        # TODO - call it infix or something, instead of dfs.
+        A generator for traversing the tree using Depth-First Search (DFS).
+        :return: A generator yielding Nodes during DFS traversal.
+        """
+        yield self  # Yield the current node
+        if self.left is not None:
+            yield from self.left.dfs()  # Recursively yield from left subtree
+        if self.right is not None:
+            yield from self.right.dfs()  # Recursively yield from right subtree

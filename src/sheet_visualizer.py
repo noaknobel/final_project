@@ -102,6 +102,7 @@ class SheetVisualizer:
         ]
         for row_index, entries_row in enumerate(self.__sheet_entries):
             for col_index, entry in enumerate(entries_row):
+                # TODO - Change to "evaluate all" method, that also validate ok input json.
                 value: Optional[Union[str, float]] = self.sheet.evaluate_position(row_index, col_index)
                 entry.insert(tk.END, value if value is not None else "")  # TODO - check.
                 self.__bind_entry_events(entry, row_index, col_index)
