@@ -61,6 +61,10 @@ class Sheet:
             return None
         return cell.get_content()
 
+    def get_cell_value(self, row_index: int, column_index: int) -> Optional[Value]:
+        """Get the cached value of the cell."""
+        return self.__cells_values_cache.get((row_index, column_index))
+
     @staticmethod
     def row_index_to_name(row_index: int) -> str:
         """
@@ -113,7 +117,6 @@ class Sheet:
             return True, updated_positions
         except Exception as e:
             print(f"An error occurred!: {e}")  # TODO - handle.
-            raise
             return False, {}
 
     def __parse_content(self, cell_content) -> Content:

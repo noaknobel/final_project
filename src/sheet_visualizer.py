@@ -174,8 +174,13 @@ class SheetVisualizer:
                 entry.delete(0, tk.END)
                 entry.insert(0, str(value))
         else:
-            self.handle_errors()
+            self.handle_errors(entry, row_index, col_index)
 
-    def handle_errors(self):
+    def handle_errors(self, entry: tk.Entry, row_index: int, column_index: int):
         # TODO - handle error
-        pass
+        value = self.sheet.get_cell_value(row_index, column_index)
+        entry.delete(0, tk.END)
+        if isinstance(value, (str, float, int)):
+            entry.insert(tk.END, value)  # TODO error type + check this if-else
+        else:
+            entry.insert(tk.END, None)
