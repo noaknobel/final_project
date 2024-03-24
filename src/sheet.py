@@ -1,4 +1,5 @@
 import re
+from enum import Enum, auto
 from typing import Dict, Tuple, Union, Optional, List, Set
 import networkx as nx
 from cell import Cell
@@ -19,6 +20,11 @@ class CircularDependenciesException(Exception):
     pass
 
 
+class ErrorType(Enum):
+    VALUE_ERROR = auto()
+    NAME_ERROR = auto()
+
+
 class Sheet:
     __EQUATION_PREFIX = "="
     # Column names consts.
@@ -31,15 +37,18 @@ class Sheet:
         self.__rows_num: int = rows_number
         self.__columns_num: int = columns_number
         # TODO - if a cell gets deleted, do not store an empty string.
-        self.__cells: Dict[Position, Cell] = {}  # Dictionary to store cells with their coordinates
         pattern_str = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=self.__COLUMN_PATTERN_GROUP,
                                                                        row=self.__ROW_PATTERN_GROUP)
         self.__CELL_PATTERN = re.compile(pattern_str)
         self.__cell_name_pattern: re.Pattern = \
             re.compile(fr"^(?P<{self.__COLUMN_PATTERN_GROUP}>[A-Z]+)(?P<{self.__ROW_PATTERN_GROUP}>[0-9]+)$")
+        # Sheet state:
+        self.__cells: Dict[Position, Cell] = {}  # Dictionary to store cells with their coordinates
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                                          var_pattern=self.__cell_name_pattern)
         self.__dependencies_graph = nx.DiGraph()
+        self.__cells_values_cache: Dict[Position, Union[str, float, ErrorType]] = {}
+
 
     def get_rows_number(self) -> int:
         return self.__rows_num
@@ -54,53 +63,9 @@ class Sheet:
             return None
         return cell.get_content()
 
-    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool, Dict[Position,
-                                                                                                   Union[str, float]]]:
-        """
-        TODO if formula - handle + handle exceptions.
-        TODO - edge cases: Evaluation error, dependencies loop, str dep, dependents re-eval (and ruining), dependency
-            with no value, Validate locations pattern and range valid.
-        """
-        current_position: Position = (row_index, col_index)
-        parsed_content: Union[str, float, Node] = self.__parse_content(written_content)
-        if isinstance(parsed_content, Node):
-            dependencies_cell_names = self.__get_string_nodes(parsed_content)
-            # Raises EvaluationException if a cell name cannot be converted to a position. TODO - handle.
-            current_dependencies: Set[Position] = {self.__cell_name_to_location(d) for d in dependencies_cell_names}
-            # Create edges that map from the current position to the dependencies position.
-            updated_edges: Set[(Position, Position)] = {(current_position, d) for d in current_dependencies}
-            # I edit a copy of the graph, so if there's an error I could revert to the original graph easily.
-            new_dependency_graph = self.__dependencies_graph.copy()
-            # Update new dependencies and remove deleted dependencies from the temporary graph.
-            existing_edges: Set[(Position, Position)] = set(self.__dependencies_graph.edges())
-            new_dependency_graph.remove_edges_from(existing_edges - updated_edges)
-            new_dependency_graph.add_edges_from(updated_edges)
-            try:
-                # Attempt a topological sort to check for cycles in the graph.
-                # For further details on the algorithm, I recommend the following explanation:
-                # https://www.youtube.com/watch?v=WqV-pxNUAYA.
-                total_order = list(nx.topological_sort(new_dependency_graph))
-                dependencies_of_current: Set[Position] = nx.descendants(new_dependency_graph, current_position)
-                dependencies_evaluation_order: List[Position] = [node for node in total_order if
-                                                                 node in dependencies_of_current]
-                # Derive dependents_update_order by using the reversed graph's total order.
-                reachable_from_current_in_reversed = nx.descendants(new_dependency_graph.reverse(), current_position)
-                dependents_update_order: List[Position] = [node for node in reversed(total_order) if
-                                                           node in reachable_from_current_in_reversed]
-                return new_dependency_graph, dependents_update_order, dependents_update_order
-            except nx.NetworkXUnfeasible:
-                raise CircularDependenciesException("Cycle detected, new edges not added.")
-        cell: Cell = Cell(written_content, parsed_content)
-
-        value: Union[str, float] = self.__evaluate_cell(cell)
-        loc = (row_index, col_index)
-        updated_cells = {loc: value}
-        success = True
-        if success:
-            self.__cells[loc] = cell
-            print("AAA", {k: self.__evaluate_cell(v) for k, v in self.__cells.items()})  # todo - remove
-            return True, updated_cells
-        return False, {}
+    def __get_cell(self, row_index: int, column_index: int) -> Optional[Cell]:
+        """Retrieve the cell object for the given row and column indexes."""
+        return self.__cells.get((row_index, column_index))
 
     @staticmethod
     def row_index_to_name(row_index: int) -> str:
@@ -121,21 +86,32 @@ class Sheet:
             col_index = col_index // cls.__NUMBER_OF_LETTERS - 1
         return name
 
-    def evaluate_position(self, row_index: int, column_index: int) -> Optional[Union[str, float]]:
-        """Get the estimated value of the cell."""
-        cell = self.__get_cell(row_index, column_index)
-        if cell is None:
-            return None
-        return self.__evaluate_cell(cell)
+    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool, Dict[Position,
+                                                                                                   Union[str, float]]]:
+        """
+        TODO if formula - handle + handle exceptions.
+        TODO - edge cases: Evaluation error, dependencies loop, str dep, dependents re-eval (and ruining), dependency
+            with no value, Validate locations pattern and range valid.
+        """
+        current_position: Position = (row_index, col_index)
+        parsed_content: Union[str, float, Node] = self.__parse_content(written_content)
+        if isinstance(parsed_content, Node):
+            new_dependency_graph, dependencies_evaluation_order, dependents_update_order = \
+                self.__try_update_dependency_graph(current_position, parsed_content)
+            # Depending on your next actions, you might need to do something with these new variables.
+            # This example just returns them for the sake of consistency with your original structure.
+            return True, {}  # Adjust according to how you want to use the new_dependency_graph and orders
+        cell: Cell = Cell(written_content, parsed_content, )
 
-    def __get_cell(self, row_index: int, column_index: int) -> Optional[Cell]:
-        """Retrieve the cell object for the given row and column indexes."""
-        return self.__cells.get((row_index, column_index))
-
-    def __evaluate_cell(self, cell: Cell) -> Union[str, float]:
-        # TODO - update to loop at deps, recursively.
-        parsed_content: Union[str, float, Node] = cell.get_parsed_content()
-        return self.__evaluate(parsed_content) if isinstance(parsed_content, Node) else parsed_content
+        value: Union[str, float] = self.__evaluate_cell(cell)
+        loc = (row_index, col_index)
+        updated_cells = {loc: value}
+        success = True
+        if success:
+            self.__cells[loc] = cell
+            print("AAA", {k: self.__evaluate_cell(v) for k, v in self.__cells.items()})  # todo - remove
+            return True, updated_cells
+        return False, {}
 
     def __parse_content(self, cell_content) -> Union[str, float, Node]:
         number_result: Optional[float] = self.__try_parse_number(cell_content)
@@ -151,14 +127,6 @@ class Sheet:
         return cell_content  # When the content is a simple string.
 
     @staticmethod
-    def __get_string_nodes(node: Node) -> List[Node]:
-        """
-        Collects all nodes in the tree where the value is of type str.
-        :return: A list of Nodes with string values.
-        """
-        return [node for node in node.dfs() if isinstance(node.value, str)]
-
-    @staticmethod
     def __try_parse_number(value: str) -> Optional[bool]:
         try:
             return float(value)
@@ -168,6 +136,92 @@ class Sheet:
     def __try_parse_formula(self, content) -> Node:
         """TODO Handle error cases."""
         return self.__parser.syntax_tree(content)
+
+    def __try_update_dependency_graph(self, current_position: Position, node: Node) -> Tuple[nx.DiGraph,
+                                                                                             List[Position],
+                                                                                             List[Position]]:
+        """
+        Return an updated graph with the dependencies of the new node at the given position,
+        and dependencies and dependents of the position according to the graph order.
+        """
+        dependencies_cell_names = self.__get_string_nodes(node)
+        # Raises EvaluationException if a cell name cannot be converted to a position. TODO - handle.
+        current_dependencies: Set[Position] = {self.__cell_name_to_location(d) for d in dependencies_cell_names}
+        # Create edges that map from the current position to the dependencies position.
+        new_dependency_graph = self.__get_updated_graph(current_position, current_dependencies)
+        return self.__compute_dependencies(new_dependency_graph, current_position)
+
+    @staticmethod
+    def __get_string_nodes(node: Node) -> List[Node]:
+        """
+        Collects all nodes in the tree where the value is of type str.
+        :return: A list of Nodes with string values.
+        """
+        return [node for node in node.dfs() if isinstance(node.value, str)]
+
+    def __cell_name_to_location(self, cell_name: str) -> Position:
+        """
+        Convert a cell name (like 'A1', 'B2', etc.) to its corresponding row and column indices.
+        :raises EvaluationException: If the cell name does not match the regular expression.
+        :return: A tuple of a row index followed by a column index.
+        """
+        match = self.__cell_name_pattern.match(cell_name)
+        if not match:
+            raise EvaluationException(f"Invalid cell name format: {cell_name}")
+        # Accessing named groups directly for better readability
+        column_part = match.group(self.__COLUMN_PATTERN_GROUP)
+        row_part = match.group(self.__ROW_PATTERN_GROUP)
+        # Compute Ascii value of each letter in the column name.
+        column_ascii_list = [(ord(char) - self.__A_ASCII) for char in column_part]
+        column_index = sum([char_index * self.__NUMBER_OF_LETTERS + char_ascii
+                            for (char_index, char_ascii) in enumerate(column_ascii_list)])
+        # Subtract one from row index to start from 0, and convert row_part from string to integer
+        row_index = int(row_part) - 1
+        return row_index, column_index
+
+    def __get_updated_graph(self, position: Position, position_dependencies: Set[Position]) -> nx.DiGraph:
+        """
+        Return an updated graph with the new dependencies of the given position.
+        """
+        updated_edges: Set[(Position, Position)] = {(position, d) for d in position_dependencies}
+        # I edit a copy of the graph, so if there's an error I could revert to the original graph easily.
+        new_dependency_graph: nx.DiGraph = self.__dependencies_graph.copy()
+        # Update new dependencies and remove deleted dependencies from the temporary graph.
+        existing_edges: Set[(Position, Position)] = set(self.__dependencies_graph.edges())
+        new_dependency_graph.remove_edges_from(existing_edges - updated_edges)
+        new_dependency_graph.add_edges_from(updated_edges)
+        return new_dependency_graph
+
+    @staticmethod
+    def __compute_dependencies(dependency_graph: nx.DiGraph, current_position: Position) -> (List[Position],
+                                                                                             List[Position]):
+        """
+        Attempt a topological sort to check for cycles in the graph.
+        For further details on the algorithm, I recommend the following explanation:
+        https://www.youtube.com/watch?v=WqV-pxNUAYA.
+        :raises CircularDependenciesException: If there is a cycle in the graph.
+        :return: The list of dependencies to evaluate in order to estimate the current position,
+        and a list of the positions that are dependent on the current position, according to the topoligical sort order.
+        """
+        try:
+            total_order = list(nx.topological_sort(dependency_graph))
+            dependencies_of_current: Set[Position] = nx.descendants(dependency_graph, current_position)
+            dependencies_evaluation_order: List[Position] = [node for node in total_order if
+                                                             node in dependencies_of_current]
+            # Derive dependents_update_order by using the reversed graph's total order.
+            reachable_from_current_in_reversed = nx.descendants(dependency_graph.reverse(), current_position)
+            dependents_update_order: List[Position] = [node for node in reversed(total_order) if
+                                                       node in reachable_from_current_in_reversed]
+            return dependencies_evaluation_order, dependents_update_order
+        except nx.NetworkXUnfeasible:
+            raise CircularDependenciesException("Cycle detected, new edges not added.")
+
+    # TODO - refactor the evaluation process!!!
+
+    def __evaluate_cell(self, cell: Cell) -> Union[str, float]:
+        # TODO - update to loop at deps, recursively.
+        parsed_content: Union[str, float, Node] = cell.get_parsed_content()
+        return self.__evaluate(parsed_content) if isinstance(parsed_content, Node) else parsed_content
 
     def __evaluate(self, node: Optional[Node]) -> float:
         """
@@ -199,12 +253,19 @@ class Sheet:
 
     def __get_cell_value(self, cell_location: str) -> float:
         row_index, column_index = self.__cell_name_to_location(cell_location)  # TODO - handle exception raised here.
-        value: Optional[float, str] = self.evaluate_position(row_index, column_index)
+        value: Optional[float, str] = self.__evaluate_position(row_index, column_index)
         if value is None:
             raise EvaluationException("Cell does not contain a value.")
         if isinstance(value, (float, int)):
             return value
         raise EvaluationException("Cell contains unexpected value type.")
+
+    def __evaluate_position(self, row_index: int, column_index: int) -> Optional[Union[str, float]]:
+        """Get the estimated value of the cell."""
+        cell = self.__get_cell(row_index, column_index)
+        if cell is None:
+            return None
+        return self.__evaluate_cell(cell)
 
     def __evaluate_internal_node(self, node: Node) -> float:
         """
@@ -227,23 +288,3 @@ class Sheet:
             return node.value.calculate(left_val, right_val)
         else:
             raise EvaluationException(f"Unsupported operator type: {type(node.value)}")
-
-    def __cell_name_to_location(self, cell_name: str) -> Position:
-        """
-        Convert a cell name (like 'A1', 'B2', etc.) to its corresponding row and column indices.
-        :raises EvaluationException: If the cell name does not match the regular expression.
-        :return: A tuple of a row index followed by a column index.
-        """
-        match = self.__cell_name_pattern.match(cell_name)
-        if not match:
-            raise EvaluationException(f"Invalid cell name format: {cell_name}")
-        # Accessing named groups directly for better readability
-        column_part = match.group(self.__COLUMN_PATTERN_GROUP)
-        row_part = match.group(self.__ROW_PATTERN_GROUP)
-        # Compute Ascii value of each letter in the column name.
-        column_ascii_list = [(ord(char) - self.__A_ASCII) for char in column_part]
-        column_index = sum([char_index * self.__NUMBER_OF_LETTERS + char_ascii
-                            for (char_index, char_ascii) in enumerate(column_ascii_list)])
-        # Subtract one from row index to start from 0, and convert row_part from string to integer
-        row_index = int(row_part) - 1
-        return row_index, column_index
