@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox
 from typing import Optional, List, Dict
 
 from sheet import Sheet, FailureReason, Value
@@ -193,6 +194,6 @@ class SheetVisualizer:
         return str(value)
 
     def __update_failure_reason_label(self, failure_reason: FailureReason) -> None:
-        error_message = self.__failure_reason_strings.get(failure_reason)
-        print("GUI failure reason:", error_message)
-        # TODO - update GUI
+        error_message = self.__failure_reason_strings.get(failure_reason, "An unknown error occurred.")
+        # Display the error message in a popup message box.
+        messagebox.showerror("Error", error_message)
