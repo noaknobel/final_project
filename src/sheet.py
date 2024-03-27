@@ -12,13 +12,14 @@ from node import Node
 
 
 # TODO list
-#  1. If a cell gets deleted, do not store an empty string. make a delete_cell method.
 #  2. Update GUI to support larger sheets, then check high column naming (also use "=AB13" in a formula).
 
 # TODO - deside what to do with strings in formulas.
 #  handle string + float case, and define string + string or string * int behavior.
 #  It acts wierd and only sometimes work.
 #  Currently I simply do not allow string values in formulas.
+#  After a check, I think it works for assignment only, like A1="=B1", B1="asd".
+#  Analyze when do I raise an error for strings in formulas and when do I not.
 
 # TODO - refactor long try-catch flow (I don't have a good idea).
 
@@ -94,14 +95,19 @@ class Sheet:
         return name
 
     def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool,
-                                                                                        Dict[Position, Value],
+                                                                                        Dict[Position, Optional[Value]],
                                                                                         Optional[FailureReason]]:
         """
         Tries to evaluate the given content and update the sheet with its evaluation in the given position.
         Returns whether the update was successful, and if so - the values to update in the GUI.
         A valid content is a valid string / number value, or a parsable formula that does not create
         a dependency cycle with other existing cells. If the content is not valid - and error is raised.
+
+        Note - If there is a None value in the dict of updated positions returned, it means that the cell was deleted.
+        It happens when given an empty string, which means deleting the cell.
+        This is done so we won't store empty / deleted values.
         """
+        print(self.__cells_values)
         try:
             current_position: Position = (row_index, col_index)
             content: Content = self.__parse_content(written_content)
@@ -116,6 +122,11 @@ class Sheet:
             dependents_to_reevaluate: List[Position] = self.__compute_dependencies(current_position,
                                                                                    new_dependency_graph)
 
+            # If new content is empty, treat it as a delete operation.
+            if content == "":
+                self.__delete_position(current_position, dependents_to_reevaluate)
+                return True, {current_position: None}, None
+
             # Evaluate / Reevaluate the current position value, then store the result in a caching dict.
             cached_results: Dict[Position, Value] = {}
             updated_value = self.__evaluate(content, cached_results) if isinstance(content, Node) else content
@@ -129,6 +140,7 @@ class Sheet:
             self.__dependencies_graph = new_dependency_graph
             self.__cells_values.update(positions_to_update)
             return True, positions_to_update, None
+
         except BadNameException:
             return False, {}, FailureReason.BAD_NAME_REFERENCE
         except EvaluationException:
@@ -139,6 +151,13 @@ class Sheet:
             return False, {}, FailureReason.DEPENDENCIES_CYCLE
         except Exception:
             return False, {}, FailureReason.UNEXPECTED_EXCEPTION
+
+    def __delete_position(self, position: Position, dependent_positions: List[Position]):
+        """Deletes cell data from the sheet if it is not a dependency of any other cell. If it doesn't exist - skip."""
+        if dependent_positions:
+            raise EvaluationException("Cannot delete cell when another cell is dependent on it.")
+        self.__cells.pop(position, None)  # Remove if exists.
+        self.__cells_values.pop(position, None)  # Remove if exists.
 
     def __parse_content(self, cell_content: str) -> Content:
         """
