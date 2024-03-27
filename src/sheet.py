@@ -20,7 +20,7 @@ from node import Node
 #  It acts wierd and only sometimes work.
 #  Currently I simply do not allow string values in formulas.
 
-# TODO - remove prints when code is done.
+# TODO - refactor long try-catch flow (I don't have a good idea).
 
 class FailureReason(Enum):
     DEPENDENCIES_CYCLE = auto()
@@ -128,20 +128,15 @@ class Sheet:
             self.__dependencies_graph = new_dependency_graph
             self.__cells_values.update(updated_positions)
             return True, updated_positions, None
-        except BadNameException as e:
-            print("EvaluationException", str(e))
+        except BadNameException:
             return False, {}, FailureReason.BAD_NAME_REFERENCE
-        except EvaluationException as e:
-            print("EvaluationException", str(e))
+        except EvaluationException:
             return False, {}, FailureReason.EVALUATION_FAILURE
         except ParserException:
-            print(f"ParserException")
             return False, {}, FailureReason.COULD_NOT_PARSE
         except CircularDependenciesException:
-            print("CircularDependenciesException")
             return False, {}, FailureReason.DEPENDENCIES_CYCLE
-        except Exception as e:
-            print(f"Unexpected failure: {e}")
+        except Exception:
             return False, {}, FailureReason.UNEXPECTED_EXCEPTION
 
     def __parse_content(self, cell_content: str) -> Content:
