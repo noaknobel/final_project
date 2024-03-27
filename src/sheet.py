@@ -5,33 +5,34 @@ from typing import Dict, Tuple, Union, Optional, List, Set
 import networkx as nx
 
 from cell import Cell
-from exceptions import CircularDependenciesException, ParserException, BadNameException, BadValueException
+from exceptions import CircularDependenciesException, ParserException, EvaluationException, BadNameException
 from expression_parser import ExpressionParser
 from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator
 from node import Node
 
 
-# NOW!
-# TODO - instead of raising evaluation error - handle value / name errors correctly.
+# TODO list
+#  1. If a cell gets deleted, do not store an empty string. make a delete_cell method.
+#  2. Update GUI to support larger sheets, then check high column naming (also use "=AB13" in a formula).
 
-# TODO - if a cell gets deleted, do not store an empty string. make a delete_cell method.
-# TODO - update GUI to support larger sheets, then check high column naming (also use "=AB13" in a formula).
-# TODO handle string + float case, and define string + string or string * int behavior.
+# TODO - deside what to do with strings in formulas.
+#  handle string + float case, and define string + string or string * int behavior.
+#  It acts wierd and only sometimes work.
+#  Currently I simply do not allow string values in formulas.
 
-class ErrorValue(Enum):
-    VALUE_ERROR = auto()
-    NAME_ERROR = auto()
-
+# TODO - remove prints when code is done.
 
 class FailureReason(Enum):
     DEPENDENCIES_CYCLE = auto()
     COULD_NOT_PARSE = auto()
     UNEXPECTED_EXCEPTION = auto()
+    EVALUATION_FAILURE = auto()
+    BAD_NAME_REFERENCE = auto()
 
 
 Position = Tuple[int, int]  # (Row Index, Column Index)
 Content = Union[str, float, Node]
-Value = Union[str, float, ErrorValue]
+Value = Union[str, float]
 
 
 class Sheet:
@@ -101,9 +102,6 @@ class Sheet:
         Returns whether the update was successful, and if so - the values to update in the GUI.
         A valid content is a valid string / number value, or a parsable formula that does not create
         a dependency cycle with other existing cells. If the content is not valid - and error is raised.
-        TODO - edge cases: Evaluation error, dependencies loop, str dep, dependents re-eval (and ruining), dependency
-            with no value, Validate locations pattern and range valid.
-        TODO - Instead of printing the error message - pass it to the GUI.
         """
         try:
             current_position: Position = (row_index, col_index)
@@ -113,25 +111,31 @@ class Sheet:
             updated_position_dependencies = set()
             if isinstance(parsed_content, Node):
                 cell_names: List[str] = self.__get_string_nodes(parsed_content)
-                # Raises EvaluationException if a cell name cannot be converted to a position. TODO - handle.
+                # Raises EvaluationException if a cell name cannot be converted to a position.
                 updated_position_dependencies: Set[Position] = {self.__cell_name_to_location(d) for d in cell_names}
             new_dependency_graph: nx.DiGraph = self.__get_updated_graph(current_position, updated_position_dependencies)
             dependents_to_reevaluate: List[Position] = self.__compute_dependencies(current_position,
                                                                                    new_dependency_graph)
-            # TODO try-except evaluation errors.
             current_evaluation_results: Dict[Position, Value] = {}  # Initialize an empty cache.
             updated_positions: Dict[Position, Value] = {
                 current_position: self.__evaluate_content(current_position, parsed_content, current_evaluation_results)}
             # Evaluating according to the graph order.
             for position in dependents_to_reevaluate:
                 updated_positions[position] = self.__evaluate_position(position, current_evaluation_results)
+
             # If success - update the state of the dependency graph and the values cache.
             self.__cells[current_position] = Cell(written_content, parsed_content)
             self.__dependencies_graph = new_dependency_graph
             self.__cells_values.update(updated_positions)
             return True, updated_positions, None
+        except BadNameException as e:
+            print("EvaluationException", str(e))
+            return False, {}, FailureReason.BAD_NAME_REFERENCE
+        except EvaluationException as e:
+            print("EvaluationException", str(e))
+            return False, {}, FailureReason.EVALUATION_FAILURE
         except ParserException:
-            print(f"ParserException")  # TODO - remove print.
+            print(f"ParserException")
             return False, {}, FailureReason.COULD_NOT_PARSE
         except CircularDependenciesException:
             print("CircularDependenciesException")
@@ -149,9 +153,7 @@ class Sheet:
         if number_result is not None:
             return number_result
         if cell_content.startswith(self.__EQUATION_PREFIX):
-            formula = cell_content[1:]
-            formula_root_node: Node = self.__try_parse_formula(formula)
-            return formula_root_node
+            return self.__parser.syntax_tree(cell_content[1:])  # Returns a Node of an expression tree.
         return cell_content  # When the content is a simple string.
 
     @staticmethod
@@ -160,10 +162,6 @@ class Sheet:
             return float(value)
         except ValueError:
             return None
-
-    def __try_parse_formula(self, content) -> Node:
-        """TODO Handle error cases."""
-        return self.__parser.syntax_tree(content)
 
     @staticmethod
     def __get_string_nodes(node: Node) -> List[str]:
@@ -242,13 +240,12 @@ class Sheet:
         # If the position is not cached anywhere, compute its value.
         cell = self.__cells.get(position)
         if not cell:
-            raise BadValueException("Cell does not exist.")
+            raise EvaluationException("Cell does not exist.")
         parsed_content = cell.get_parsed_content()
         return self.__evaluate_content(position, parsed_content, evaluated_positions)
 
     def __evaluate_content(self, position: Position, content: Content,
                            evaluated_positions: Dict[Position, Value]):
-        print("IN 2")
         value = self.__evaluate(content, evaluated_positions) if isinstance(content, Node) else content
         # Update the local cache, but not the sheet-level stored values yet.
         evaluated_positions[position] = value
@@ -275,25 +272,27 @@ class Sheet:
             cell_position = self.__cell_name_to_location(node.value)
             return self.__evaluate_position(cell_position, cache)
         # If node's value isn't float or string, raise an exception.
-        raise BadValueException(f"Invalid leaf value: {node.value}")
+        raise EvaluationException(f"Invalid leaf value: {node.value}")
 
     def __evaluate_internal_node(self, node: Node, cache: Dict[Position, Value]) -> Value:
         """
         Evaluates an internal (non-leaf) node, using the cache to avoid redundant calculations.
         """
         if not isinstance(node.value, MathOperator):
-            raise BadValueException(f"Unsupported node value: {node.value}")
+            raise EvaluationException(f"Unsupported node value: {node.value}")
         # Retrieve values for left and right children if they exist.
         left_val = self.__evaluate(node.left, cache) if node.left else None
         right_val = self.__evaluate(node.right, cache) if node.right else None
+        if not isinstance(left_val, (float, int)) or not isinstance(left_val, (float, int)):
+            raise EvaluationException("All values in a formula evaluation must be numbers.")
         # Handle unary and binary operations.
         if isinstance(node.value, UnaryOperator):
             if right_val is None:
-                raise BadValueException("Missing operand for unary operator.")
+                raise EvaluationException("Missing operand for unary operator.")
             return node.value.calculate(right_val)
         if isinstance(node.value, BinaryOperator):
             if left_val is None or right_val is None:
-                raise BadValueException("Missing operands for binary operator.")
+                raise EvaluationException("Missing operands for binary operator.")
             return node.value.calculate(left_val, right_val)
         # If the node's operator type is neither unary nor binary, raise an exception.
-        raise BadValueException(f"Unsupported operator type: {type(node.value)}")
+        raise EvaluationException(f"Unsupported operator type: {type(node.value)}")

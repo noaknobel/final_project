@@ -8,16 +8,11 @@ class CircularDependenciesException(Exception):
     pass
 
 
-class FormulaEvaluationException(Exception):
+class EvaluationException(Exception):
     """A failure to evaluate a cell content."""
     pass
 
 
-class BadNameException(FormulaEvaluationException):
+class BadNameException(Exception):
     """A failure to evaluate a cell due to missing / invalid cell name."""
-    pass
-
-
-class BadValueException(FormulaEvaluationException):
-    """A failure to evaluate a cell an error during the computation, e.g. division by zero."""
     pass

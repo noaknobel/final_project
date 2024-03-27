@@ -1,7 +1,7 @@
 import tkinter as tk
 from typing import Optional, List, Dict
 
-from sheet import Sheet, ErrorValue, FailureReason, Value
+from sheet import Sheet, FailureReason, Value
 
 
 class SheetVisualizer:
@@ -35,11 +35,12 @@ class SheetVisualizer:
         # Generate the grid of cells.
         self.__create_sheet_ui()
         # Initializing mapping from error types to GUI strings as a dict.
-        self.__error_value_strings: Dict[ErrorValue, str] = {ErrorValue.VALUE_ERROR: "#VALUE!",
-                                                             ErrorValue.NAME_ERROR: "#NAME!"}
+        # Note that a name error probably won't happen in practice since this case should fail during parsing.
         self.__failure_reason_strings: Dict[FailureReason, str] = {
             FailureReason.COULD_NOT_PARSE: "Could Not Parse.",
             FailureReason.DEPENDENCIES_CYCLE: "Dependency Cycle Detected.",
+            FailureReason.EVALUATION_FAILURE: "Failed to evaluate cell update.",
+            FailureReason.BAD_NAME_REFERENCE: "Formula contained an invalid name.",
             FailureReason.UNEXPECTED_EXCEPTION: "Aborted - Unexpected Exception."
         }
 
@@ -184,13 +185,14 @@ class SheetVisualizer:
             self.__update_entry_text(entry, self.__value_to_show(old_value))
             self.__update_failure_reason_label(failure_reason)
 
-    def __value_to_show(self, value: Optional[Value]) -> Optional[str]:
+    @staticmethod
+    def __value_to_show(value: Optional[Value]) -> Optional[str]:
         """Give a value in a sheet cell, return the string value that should be shown in the GUI."""
         if value is None:
-            return None
-        return self.__error_value_strings.get(value) if isinstance(value, ErrorValue) else str(value)
+            return ""
+        return str(value)
 
     def __update_failure_reason_label(self, failure_reason: FailureReason) -> None:
         error_message = self.__failure_reason_strings.get(failure_reason)
-        print(error_message)
+        print("GUI failure reason:", error_message)
         # TODO - update GUI
