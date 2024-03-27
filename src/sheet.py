@@ -5,11 +5,18 @@ from typing import Dict, Tuple, Union, Optional, List, Set
 import networkx as nx
 
 from cell import Cell
-from exceptions import EvaluationException, CircularDependenciesException, ParserException
+from exceptions import CircularDependenciesException, ParserException, BadNameException, BadValueException
 from expression_parser import ExpressionParser
 from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator
 from node import Node
 
+
+# NOW!
+# TODO - instead of raising evaluation error - handle value / name errors correctly.
+
+# TODO - if a cell gets deleted, do not store an empty string. make a delete_cell method.
+# TODO - update GUI to support larger sheets, then check high column naming (also use "=AB13" in a formula).
+# TODO handle string + float case, and define string + string or string * int behavior.
 
 class ErrorValue(Enum):
     VALUE_ERROR = auto()
@@ -38,21 +45,18 @@ class Sheet:
     def __init__(self, rows_number: int, columns_number: int):
         self.__rows_num: int = rows_number
         self.__columns_num: int = columns_number
-        # TODO - if a cell gets deleted, do not store an empty string.
         pattern_str = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=self.__COLUMN_PATTERN_GROUP,
                                                                        row=self.__ROW_PATTERN_GROUP)
         self.__CELL_PATTERN = re.compile(pattern_str)
         self.__cell_name_pattern: re.Pattern = \
             re.compile(fr"^(?P<{self.__COLUMN_PATTERN_GROUP}>[A-Z]+)(?P<{self.__ROW_PATTERN_GROUP}>[0-9]+)$")
         # Sheet state:
-        self.__cells: Dict[Position, Cell] = {}  # Dictionary to store cells with their coordinates
+        # Dictionary to store cells with their coordinates.
+        self.__cells: Dict[Position, Cell] = {}  # Cells are only replaced, not updated.
+        self.__cells_values: Dict[Position, Value] = {}  # Stores cells values, and their reevaluations.
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                                          var_pattern=self.__cell_name_pattern)
-        self.__dependencies_graph = nx.DiGraph()
-        # TODO - consider removing __cells_values_cache.
-        #  Is it used at all? during evaluation of the dependencies themself,
-        #  even if its in the cache we check the runtime check and recompute if not there.
-        self.__cells_values_cache: Dict[Position, Value] = {}
+        self.__dependencies_graph = nx.DiGraph()  # Stores the dependencies between cells (formulas).
 
     def get_rows_number(self) -> int:
         return self.__rows_num
@@ -69,7 +73,7 @@ class Sheet:
 
     def get_value(self, row_index: int, column_index: int) -> Optional[Value]:
         """Get the cached value of the cell."""
-        return self.__cells_values_cache.get((row_index, column_index))
+        return self.__cells_values.get((row_index, column_index))
 
     @staticmethod
     def row_index_to_name(row_index: int) -> str:
@@ -83,7 +87,6 @@ class Sheet:
         """
         A string label representing the column, starting with "A".
         """
-        # TODO - check this running main with a larger sheet.
         name = ""
         while col_index >= 0:
             name += chr(col_index % cls.__NUMBER_OF_LETTERS + cls.__A_ASCII)
@@ -98,9 +101,6 @@ class Sheet:
         Returns whether the update was successful, and if so - the values to update in the GUI.
         A valid content is a valid string / number value, or a parsable formula that does not create
         a dependency cycle with other existing cells. If the content is not valid - and error is raised.
-        :raise ParserException: If the parsing of a formula failed.
-        :raise
-        TODO if formula - handle + handle exceptions.
         TODO - edge cases: Evaluation error, dependencies loop, str dep, dependents re-eval (and ruining), dependency
             with no value, Validate locations pattern and range valid.
         TODO - Instead of printing the error message - pass it to the GUI.
@@ -128,7 +128,7 @@ class Sheet:
             # If success - update the state of the dependency graph and the values cache.
             self.__cells[current_position] = Cell(written_content, parsed_content)
             self.__dependencies_graph = new_dependency_graph
-            self.__cells_values_cache.update(updated_positions)
+            self.__cells_values.update(updated_positions)
             return True, updated_positions, None
         except ParserException:
             print(f"ParserException")  # TODO - remove print.
@@ -181,7 +181,7 @@ class Sheet:
         """
         match = self.__cell_name_pattern.match(cell_name)
         if not match:
-            raise EvaluationException(f"Invalid cell name format: {cell_name}")
+            raise BadNameException(f"Invalid cell name format: {cell_name}")
         # Accessing named groups directly for better readability
         column_part = match.group(self.__COLUMN_PATTERN_GROUP)
         row_part = match.group(self.__ROW_PATTERN_GROUP)
@@ -234,20 +234,21 @@ class Sheet:
         except nx.NetworkXUnfeasible:
             raise CircularDependenciesException("Cycle detected, new edges not added.")
 
-    def __evaluate_position(self, position: Position, cache: Dict[Position, Value]) -> Value:
+    def __evaluate_position(self, position: Position, evaluated_positions: Dict[Position, Value]) -> Value:
         # Attempt to fetch the value from the local cache first.
-        if position in cache:
-            return cache[position]
+        if position in evaluated_positions:
+            return evaluated_positions[position]
 
         # If the position is not cached anywhere, compute its value.
         cell = self.__cells.get(position)
         if not cell:
-            raise EvaluationException("Cell does not exist.")
+            raise BadValueException("Cell does not exist.")
         parsed_content = cell.get_parsed_content()
-        return self.__evaluate_content(position, parsed_content, cache)
+        return self.__evaluate_content(position, parsed_content, evaluated_positions)
 
     def __evaluate_content(self, position: Position, content: Content,
                            evaluated_positions: Dict[Position, Value]):
+        print("IN 2")
         value = self.__evaluate(content, evaluated_positions) if isinstance(content, Node) else content
         # Update the local cache, but not the sheet-level stored values yet.
         evaluated_positions[position] = value
@@ -274,35 +275,25 @@ class Sheet:
             cell_position = self.__cell_name_to_location(node.value)
             return self.__evaluate_position(cell_position, cache)
         # If node's value isn't float or string, raise an exception.
-        raise EvaluationException(f"Invalid leaf value: {node.value}")
+        raise BadValueException(f"Invalid leaf value: {node.value}")
 
     def __evaluate_internal_node(self, node: Node, cache: Dict[Position, Value]) -> Value:
         """
         Evaluates an internal (non-leaf) node, using the cache to avoid redundant calculations.
         """
         if not isinstance(node.value, MathOperator):
-            raise EvaluationException(f"Unsupported node value: {node.value}")
+            raise BadValueException(f"Unsupported node value: {node.value}")
         # Retrieve values for left and right children if they exist.
         left_val = self.__evaluate(node.left, cache) if node.left else None
         right_val = self.__evaluate(node.right, cache) if node.right else None
         # Handle unary and binary operations.
         if isinstance(node.value, UnaryOperator):
             if right_val is None:
-                raise EvaluationException("Missing operand for unary operator.")
+                raise BadValueException("Missing operand for unary operator.")
             return node.value.calculate(right_val)
         if isinstance(node.value, BinaryOperator):
             if left_val is None or right_val is None:
-                raise EvaluationException("Missing operands for binary operator.")
+                raise BadValueException("Missing operands for binary operator.")
             return node.value.calculate(left_val, right_val)
         # If the node's operator type is neither unary nor binary, raise an exception.
-        raise EvaluationException(f"Unsupported operator type: {type(node.value)}")
-
-    def __get_cell_value(self, cell_location: str, cache: Dict[Position, Value]) -> Value:
-        position = self.__cell_name_to_location(cell_location)  # TODO - handle exception raised here.
-        # Use cache to get or evaluate the cell's value.
-        value = self.__evaluate_position(position, cache)
-        if value is None:
-            raise EvaluationException("Cell does not contain a value.")
-        if isinstance(value, (float, int)):
-            return value
-        raise EvaluationException("Cell contains unexpected value type.")
+        raise BadValueException(f"Unsupported operator type: {type(node.value)}")
