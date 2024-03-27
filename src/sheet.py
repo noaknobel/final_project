@@ -5,20 +5,26 @@ from typing import Dict, Tuple, Union, Optional, List, Set
 import networkx as nx
 
 from cell import Cell
-from exceptions import EvaluationException, CircularDependenciesException
+from exceptions import EvaluationException, CircularDependenciesException, ParserException
 from expression_parser import ExpressionParser
 from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator
 from node import Node
 
 
-class ErrorType(Enum):
+class ErrorValue(Enum):
     VALUE_ERROR = auto()
     NAME_ERROR = auto()
 
 
+class FailureReason(Enum):
+    DEPENDENCIES_CYCLE = auto()
+    COULD_NOT_PARSE = auto()
+    UNEXPECTED_EXCEPTION = auto()
+
+
 Position = Tuple[int, int]  # (Row Index, Column Index)
 Content = Union[str, float, Node]
-Value = Union[str, float, ErrorType]
+Value = Union[str, float, ErrorValue]
 
 
 class Sheet:
@@ -61,7 +67,7 @@ class Sheet:
             return None
         return cell.get_content()
 
-    def get_cell_value(self, row_index: int, column_index: int) -> Optional[Value]:
+    def get_value(self, row_index: int, column_index: int) -> Optional[Value]:
         """Get the cached value of the cell."""
         return self.__cells_values_cache.get((row_index, column_index))
 
@@ -84,11 +90,20 @@ class Sheet:
             col_index = col_index // cls.__NUMBER_OF_LETTERS - 1
         return name
 
-    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool, Dict[Position, Value]]:
+    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool,
+                                                                                        Dict[Position, Value],
+                                                                                        Optional[FailureReason]]:
         """
+        Tries to evaluate the given content and update the sheet with its evaluation in the given position.
+        Returns whether the update was successful, and if so - the values to update in the GUI.
+        A valid content is a valid string / number value, or a parsable formula that does not create
+        a dependency cycle with other existing cells. If the content is not valid - and error is raised.
+        :raise ParserException: If the parsing of a formula failed.
+        :raise
         TODO if formula - handle + handle exceptions.
         TODO - edge cases: Evaluation error, dependencies loop, str dep, dependents re-eval (and ruining), dependency
             with no value, Validate locations pattern and range valid.
+        TODO - Instead of printing the error message - pass it to the GUI.
         """
         try:
             current_position: Position = (row_index, col_index)
@@ -104,32 +119,39 @@ class Sheet:
             dependents_to_reevaluate: List[Position] = self.__compute_dependencies(current_position,
                                                                                    new_dependency_graph)
             # TODO try-except evaluation errors.
-            cache = {}  # Initialize an empty cache.
+            current_evaluation_results: Dict[Position, Value] = {}  # Initialize an empty cache.
             updated_positions: Dict[Position, Value] = {
-                current_position: self.__evaluate_content(current_position, parsed_content, cache)}
+                current_position: self.__evaluate_content(current_position, parsed_content, current_evaluation_results)}
             # Evaluating according to the graph order.
             for position in dependents_to_reevaluate:
-                updated_positions[position] = self.__evaluate_position(position, cache)
+                updated_positions[position] = self.__evaluate_position(position, current_evaluation_results)
             # If success - update the state of the dependency graph and the values cache.
             self.__cells[current_position] = Cell(written_content, parsed_content)
             self.__dependencies_graph = new_dependency_graph
             self.__cells_values_cache.update(updated_positions)
-            return True, updated_positions
+            return True, updated_positions, None
+        except ParserException:
+            print(f"ParserException")  # TODO - remove print.
+            return False, {}, FailureReason.COULD_NOT_PARSE
+        except CircularDependenciesException:
+            print("CircularDependenciesException")
+            return False, {}, FailureReason.DEPENDENCIES_CYCLE
         except Exception as e:
-            print(f"An error occurred!: {e}")  # TODO - handle.
-            return False, {}
+            print(f"Unexpected failure: {e}")
+            return False, {}, FailureReason.UNEXPECTED_EXCEPTION
 
-    def __parse_content(self, cell_content) -> Content:
+    def __parse_content(self, cell_content: str) -> Content:
+        """
+        Converts a string content of a cell in the sheet to a parsed value that can be evaluated.
+        :raises ParserException: If the cell content is an invalid formula that cannot be parsed.
+        """
         number_result: Optional[float] = self.__try_parse_number(cell_content)
         if number_result is not None:
             return number_result
         if cell_content.startswith(self.__EQUATION_PREFIX):
-            try:
-                formula = cell_content[1:]
-                formula_root_node: Node = self.__try_parse_formula(formula)
-                return formula_root_node
-            except Exception as e:  # TODO Consider only Parse Exception.
-                raise  # TODO - handle exceptions!
+            formula = cell_content[1:]
+            formula_root_node: Node = self.__try_parse_formula(formula)
+            return formula_root_node
         return cell_content  # When the content is a simple string.
 
     @staticmethod
@@ -224,10 +246,11 @@ class Sheet:
         parsed_content = cell.get_parsed_content()
         return self.__evaluate_content(position, parsed_content, cache)
 
-    def __evaluate_content(self, position, parsed_content, cache):
-        value = self.__evaluate(parsed_content, cache) if isinstance(parsed_content, Node) else parsed_content
-        # Update the local cache but not the sheet-level cache yet.
-        cache[position] = value
+    def __evaluate_content(self, position: Position, content: Content,
+                           evaluated_positions: Dict[Position, Value]):
+        value = self.__evaluate(content, evaluated_positions) if isinstance(content, Node) else content
+        # Update the local cache, but not the sheet-level stored values yet.
+        evaluated_positions[position] = value
         return value
 
     def __evaluate(self, node: Node, cache: Dict[Position, Value]) -> Value:
