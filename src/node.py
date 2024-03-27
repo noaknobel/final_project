@@ -24,14 +24,13 @@ class Node:
         """
         return self.left is None and self.right is None
 
-    def dfs(self) -> Generator["Node", None, None]:
+    def preorder(self) -> Generator["Node", None, None]:
         """
-        # TODO - call it infix or something, instead of dfs.
-        A generator for traversing the tree using Depth-First Search (DFS).
-        :return: A generator yielding Nodes during DFS traversal.
+        A generator for preorder traversal of a tree, where self is the root node.
+        :return: A generator yielding Nodes.
         """
         yield self  # Yield the current node
         if self.left is not None:
-            yield from self.left.dfs()  # Recursively yield from left subtree
+            yield from self.left.preorder()  # Recursively yield from left subtree
         if self.right is not None:
-            yield from self.right.dfs()  # Recursively yield from right subtree
+            yield from self.right.preorder()  # Recursively yield from right subtree

@@ -165,7 +165,7 @@ class Sheet:
         Collects all nodes in the tree where the value is of type str.
         :return: A list of Nodes with string values.
         """
-        return [node.value for node in node.dfs() if isinstance(node.value, str)]
+        return [node.value for node in node.preorder() if isinstance(node.value, str)]
 
     def __cell_name_to_location(self, cell_name: str) -> Position:
         """
