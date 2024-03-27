@@ -52,9 +52,8 @@ class Sheet:
         self.__cell_name_pattern: re.Pattern = \
             re.compile(fr"^(?P<{self.__COLUMN_PATTERN_GROUP}>[A-Z]+)(?P<{self.__ROW_PATTERN_GROUP}>[0-9]+)$")
         # Sheet state:
-        # Dictionary to store cells with their coordinates.
-        self.__cells: Dict[Position, Cell] = {}  # Cells are only replaced, not updated.
-        self.__cells_values: Dict[Position, Value] = {}  # Stores cells values, and their reevaluations.
+        self.__cells: Dict[Position, Cell] = {}
+        self.__cells_values: Dict[Position, Value] = {}  # Allows retrieving values without reevaluation.
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                                          var_pattern=self.__cell_name_pattern)
         self.__dependencies_graph = nx.DiGraph()  # Stores the dependencies between cells (formulas).
@@ -105,29 +104,31 @@ class Sheet:
         """
         try:
             current_position: Position = (row_index, col_index)
-            parsed_content: Content = self.__parse_content(written_content)
+            content: Content = self.__parse_content(written_content)
 
             # Compute dependents to update, and validate no cycles in the dependency graph.
             updated_position_dependencies = set()
-            if isinstance(parsed_content, Node):
-                cell_names: List[str] = self.__get_string_nodes(parsed_content)
+            if isinstance(content, Node):
+                cell_names: List[str] = self.__get_string_nodes(content)
                 # Raises EvaluationException if a cell name cannot be converted to a position.
                 updated_position_dependencies: Set[Position] = {self.__cell_name_to_location(d) for d in cell_names}
             new_dependency_graph: nx.DiGraph = self.__get_updated_graph(current_position, updated_position_dependencies)
             dependents_to_reevaluate: List[Position] = self.__compute_dependencies(current_position,
                                                                                    new_dependency_graph)
-            current_evaluation_results: Dict[Position, Value] = {}  # Initialize an empty cache.
-            updated_positions: Dict[Position, Value] = {
-                current_position: self.__evaluate_content(current_position, parsed_content, current_evaluation_results)}
-            # Evaluating according to the graph order.
-            for position in dependents_to_reevaluate:
-                updated_positions[position] = self.__evaluate_position(position, current_evaluation_results)
 
+            # Evaluate / Reevaluate the current position value, then store the result in a caching dict.
+            cached_results: Dict[Position, Value] = {}
+            updated_value = self.__evaluate(content, cached_results) if isinstance(content, Node) else content
+            cached_results[current_position] = updated_value
+            positions_to_update: Dict[Position, Value] = {current_position: updated_value}
+            # Evaluating current position dependents according to the dependency graph order.
+            for position in dependents_to_reevaluate:
+                positions_to_update[position] = self.__evaluate_position(position, cached_results)
             # If success - update the state of the dependency graph and the values cache.
-            self.__cells[current_position] = Cell(written_content, parsed_content)
+            self.__cells[current_position] = Cell(written_content, content)
             self.__dependencies_graph = new_dependency_graph
-            self.__cells_values.update(updated_positions)
-            return True, updated_positions, None
+            self.__cells_values.update(positions_to_update)
+            return True, positions_to_update, None
         except BadNameException:
             return False, {}, FailureReason.BAD_NAME_REFERENCE
         except EvaluationException:
@@ -228,33 +229,27 @@ class Sheet:
             raise CircularDependenciesException("Cycle detected, new edges not added.")
 
     def __evaluate_position(self, position: Position, evaluated_positions: Dict[Position, Value]) -> Value:
-        # Attempt to fetch the value from the local cache first.
+        # Attempt to fetch the updated results first (changes from the stored values).
         if position in evaluated_positions:
             return evaluated_positions[position]
-
         # If the position is not cached anywhere, compute its value.
         cell = self.__cells.get(position)
         if not cell:
             raise EvaluationException("Cell does not exist.")
-        parsed_content = cell.get_parsed_content()
-        return self.__evaluate_content(position, parsed_content, evaluated_positions)
-
-    def __evaluate_content(self, position: Position, content: Content,
-                           evaluated_positions: Dict[Position, Value]):
+        content = cell.get_parsed_content()
         value = self.__evaluate(content, evaluated_positions) if isinstance(content, Node) else content
         # Update the local cache, but not the sheet-level stored values yet.
         evaluated_positions[position] = value
         return value
 
-    def __evaluate(self, node: Node, cache: Dict[Position, Value]) -> Value:
+    def __evaluate(self, node: Node, reevaluated_values: Dict[Position, Value]) -> Value:
         """
-        Recursively evaluates the syntax tree from the given node, using and updating a cache.
+        Recursively evaluates the syntax tree from the given node, while updating the reevaluated_values with evaluated
+         results.
         """
-        # Evaluate leaf nodes directly.
         if node.is_leaf():
-            return self.__evaluate_leaf_node(node, cache)
-        # Evaluate internal nodes.
-        return self.__evaluate_internal_node(node, cache)
+            return self.__evaluate_leaf_node(node, reevaluated_values)
+        return self.__evaluate_internal_node(node, reevaluated_values)
 
     def __evaluate_leaf_node(self, node: Node, cache: Dict[Position, Value]) -> Value:
         """
