@@ -1,3 +1,5 @@
+import csv
+import os
 import re
 from enum import Enum, auto
 from typing import Dict, Tuple, Union, Optional, List, Set
@@ -23,6 +25,9 @@ from node import Node
 
 # TODO - refactor long try-catch flow (I don't have a good idea).
 
+# TODO - explain in readme and in video why backend sheet is catching all exceptions instead of handling them inside
+#  the GUI.
+
 class FailureReason(Enum):
     DEPENDENCIES_CYCLE = auto()
     COULD_NOT_PARSE = auto()
@@ -43,6 +48,8 @@ class Sheet:
     __A_ASCII = 65
     __COLUMN_PATTERN_GROUP = "column"
     __ROW_PATTERN_GROUP = "row"
+    # Storage consts.
+    __CSV_EXTENSION = '.csv'
 
     def __init__(self, rows_number: int, columns_number: int):
         self.__rows_num: int = rows_number
@@ -305,3 +312,30 @@ class Sheet:
             return node.value.calculate(left_val, right_val)
         # If the node's operator type is neither unary nor binary, raise an exception.
         raise EvaluationException(f"Unsupported operator type: {type(node.value)}")
+
+    def try_save_csv(self, file_name: str) -> bool:
+        """
+        Saves the sheet's current state as a CSV file, formatted like a table without explicit row and column indices.
+
+        :param file_name: The path to the file where the sheet should be saved, can be absolute or relative.
+        :return: True if the file was saved successfully, False otherwise.
+        """
+        if not file_name.endswith(self.__CSV_EXTENSION):
+            return False
+        try:
+            with open(file_name, mode='w', newline='') as file:
+                csv_writer = csv.writer(file)
+                grid = self.__to_csv_table()
+                for row in grid:
+                    csv_writer.writerow(row)
+            return True
+        except Exception:
+            return False
+
+    def __to_csv_table(self) -> List[List[str]]:
+        """Convert stored sheet data to a matrix of string values."""
+        grid = [["" for _ in range(self.get_columns_number())] for _ in range(self.get_rows_number())]
+        for (row_index, column_index), cell in self.__cells.items():
+            cell_content = cell.get_content()
+            grid[row_index][column_index] = cell_content if cell_content else ""
+        return grid

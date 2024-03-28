@@ -88,16 +88,26 @@ class SheetVisualizer:
         sheet_name_label = tk.Label(self.__root, text=self.__USER_NAME_LABEL, font=self.__FONT)
         sheet_name_label.grid(row=self.__SPREADSHEET_USER_NAME_ROW, column=1, pady=5, sticky="e")
         # Add entry widget for title
-        smaller_title_entry = tk.Entry(self.__root, font=self.__FONT)
-        smaller_title_entry.grid(row=self.__SPREADSHEET_USER_NAME_ROW, column=2, columnspan=column_span_length, pady=5,
-                                 sticky="w")
+        self.__smaller_title_entry = tk.Entry(self.__root, font=self.__FONT)
+        self.__smaller_title_entry.grid(row=self.__SPREADSHEET_USER_NAME_ROW, column=2, columnspan=column_span_length,
+                                        pady=5, sticky="w")
         # Place the current cell & value in the visual grid.
         self.__current_cell_label.grid(row=self.__CURRENT_CELL_ROW, column=1, columnspan=column_span_length)
         self.__current_value_label.grid(row=self.__CURRENT_CELL_VALUE_ROW, column=1, columnspan=column_span_length)
 
-    def __save_changes(self):
-        # todo: Store json.
-        pass
+    def __save_changes(self) -> None:
+        # Retrieve the file name from the entry widget
+        file_name = self.__smaller_title_entry.get()
+        if not file_name:  # Check if the file name is not empty
+            messagebox.showwarning("Warning", "Please enter a file name.")
+            return
+
+        # Use the file name to save the sheet
+        save_success = self.__sheet.try_save_csv(file_name)
+        if save_success:
+            messagebox.showinfo("Save Successful", "The changes were successfully saved.")
+        else:
+            messagebox.showerror("Save Failed", "Failed to store the changes.")
 
     def __add_gui_sheet_table_cells(self) -> None:
         """
