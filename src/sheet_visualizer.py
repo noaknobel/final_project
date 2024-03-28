@@ -62,12 +62,12 @@ class SheetVisualizer:
         Adds indexes of columns and rows to the gui.
         """
         # Add Excel-like column labels.
-        for col_index in range(self.__sheet.get_columns_number()):
+        for col_index in range(self.__sheet.COLUMNS_NUM):
             col_label = tk.Label(self.__root, text=self.__sheet.column_index_to_name(col_index), font=self.__FONT,
                                  fg=self.__COLOR)
             col_label.grid(row=self.__COLUMN_NAMES_ROW, column=col_index + self.__FIRST_COLUMN_NAME_INDEX)
         # Add column of row indexes.
-        for row_index in range(self.__sheet.get_rows_number()):
+        for row_index in range(self.__sheet.ROWS_NUM):
             row_name = self.__sheet.row_index_to_name(row_index)  # Row numbers start with 1.
             index_label = tk.Label(self.__root, text=str(row_name), font=self.__FONT, fg=self.__COLOR)
             index_label.grid(row=row_index + self.__FIRST_SPREADSHEET_ROW, column=self.__ROW_INDEX_COLUMN)
@@ -78,12 +78,11 @@ class SheetVisualizer:
         """
         # Add title
         title_label = tk.Label(self.__root, text=self.__SPREADSHEET_NAME, font=self.__TITLE_FONT, fg=self.__TITLE_COLOR)
-        title_label.grid(row=self.__SPREADSHEET_NAME_ROW, column=1, columnspan=self.__sheet.get_columns_number() + 2,
-                         pady=10)
+        title_label.grid(row=self.__SPREADSHEET_NAME_ROW, column=1, columnspan=self.__sheet.COLUMNS_NUM + 2, pady=10)
         # Add a save button
         save_button = tk.Button(self.__root, text=self.__SAVE_BUTTON_TEXT, command=self.__save_changes)
         save_button.grid(row=self.__SPREADSHEET_NAME_ROW, column=1, pady=5, sticky="w")
-        column_span_length = self.__sheet.get_columns_number() + 1
+        column_span_length = self.__sheet.COLUMNS_NUM + 1
         # Add label "Sheet name:"
         sheet_name_label = tk.Label(self.__root, text=self.__USER_NAME_LABEL, font=self.__FONT)
         sheet_name_label.grid(row=self.__SPREADSHEET_USER_NAME_ROW, column=1, pady=5, sticky="e")
@@ -116,8 +115,8 @@ class SheetVisualizer:
          and bind each entry to GUI events.
         """
         self.__sheet_entries: List[List[tk.Entry]] = [
-            [tk.Entry(self.__root, width=10, font=self.__FONT) for _ in range(self.__sheet.get_columns_number())]
-            for _ in range(self.__sheet.get_rows_number())
+            [tk.Entry(self.__root, width=10, font=self.__FONT) for _ in range(self.__sheet.COLUMNS_NUM)]
+            for _ in range(self.__sheet.ROWS_NUM)
         ]
         for row_index, entries_row in enumerate(self.__sheet_entries):
             for col_index, entry in enumerate(entries_row):
@@ -155,7 +154,6 @@ class SheetVisualizer:
         """Update the view of the cell itself."""
         entry.delete(0, tk.END)
         entry.insert(0, "" if content is None else content)
-
 
     def __key_write_entry(self, entry: tk.Entry):
         """

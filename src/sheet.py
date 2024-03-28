@@ -51,10 +51,11 @@ class Sheet:
     # Storage consts.
     __CSV_EXTENSION = '.csv'
     __JSON_EXTENSION = '.json'
+    # The sheet currently support a fixed size that usually fits a laptop screen.
+    ROWS_NUM: int = 20
+    COLUMNS_NUM: int = 10
 
-    def __init__(self, rows_number: int, columns_number: int):
-        self.__rows_num: int = rows_number
-        self.__columns_num: int = columns_number
+    def __init__(self):
         pattern_str = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=self.__COLUMN_PATTERN_GROUP,
                                                                        row=self.__ROW_PATTERN_GROUP)
         self.__CELL_PATTERN = re.compile(pattern_str)
@@ -66,12 +67,6 @@ class Sheet:
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                                          var_pattern=self.__cell_name_pattern)
         self.__dependencies_graph = nx.DiGraph()  # Stores the dependencies between cells (formulas).
-
-    def get_rows_number(self) -> int:
-        return self.__rows_num
-
-    def get_columns_number(self) -> int:
-        return self.__columns_num
 
     def get_cell_content(self, row_index: int, column_index: int) -> Optional[str]:
         """Get the content of the cell."""
@@ -347,7 +342,7 @@ class Sheet:
 
     def __to_csv_table(self) -> List[List[str]]:
         """Convert stored sheet data to a matrix of string values."""
-        grid = [["" for _ in range(self.get_columns_number())] for _ in range(self.get_rows_number())]
+        grid = [["" for _ in range(self.COLUMNS_NUM)] for _ in range(self.ROWS_NUM)]
         for (row_index, column_index), cell in self.__cells.items():
             cell_content = cell.get_content()
             grid[row_index][column_index] = cell_content if cell_content else ""
