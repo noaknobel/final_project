@@ -103,7 +103,7 @@ class SheetVisualizer:
             return
 
         # Use the file name to save the sheet
-        save_success = self.__sheet.try_save_csv(file_name)
+        save_success = self.__sheet.try_save(file_name)
         if save_success:
             messagebox.showinfo("Save Successful", "The changes were successfully saved.")
         else:
@@ -144,7 +144,7 @@ class SheetVisualizer:
         in the current cell header view and in the entry content.
         The method occurs when the user clicks on the bound entry.
         """
-        self.__current_cell_label.config(text=f"Cell: {self.__get_cell_name(col_index, row_index)}")
+        self.__current_cell_label.config(text=f"Cell: {self.__sheet.get_cell_name(col_index, row_index)}")
         content: Optional[str] = self.__sheet.get_cell_content(row_index, col_index)
         self.__update_entry_text(entry, content)
         if content is not None:
@@ -156,10 +156,6 @@ class SheetVisualizer:
         entry.delete(0, tk.END)
         entry.insert(0, "" if content is None else content)
 
-    def __get_cell_name(self, col_index: int, row_index: int) -> str:
-        row_name: int = self.__sheet.row_index_to_name(row_index)
-        col_name: str = self.__sheet.column_index_to_name(col_index)
-        return f"{col_name}{row_name}"
 
     def __key_write_entry(self, entry: tk.Entry):
         """

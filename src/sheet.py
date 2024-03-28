@@ -1,5 +1,5 @@
 import csv
-import os
+import json
 import re
 from enum import Enum, auto
 from typing import Dict, Tuple, Union, Optional, List, Set
@@ -50,6 +50,7 @@ class Sheet:
     __ROW_PATTERN_GROUP = "row"
     # Storage consts.
     __CSV_EXTENSION = '.csv'
+    __JSON_EXTENSION = '.json'
 
     def __init__(self, rows_number: int, columns_number: int):
         self.__rows_num: int = rows_number
@@ -101,9 +102,13 @@ class Sheet:
             col_index = col_index // cls.__NUMBER_OF_LETTERS - 1
         return name
 
-    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[bool,
-                                                                                        Dict[Position, Optional[Value]],
-                                                                                        Optional[FailureReason]]:
+    def get_cell_name(self, col_index: int, row_index: int) -> str:
+        row_name: str = self.row_index_to_name(row_index)
+        col_name: str = self.column_index_to_name(col_index)
+        return f"{col_name}{row_name}"
+
+    def try_update(self, row_index: int, col_index: int, written_content: str) -> Tuple[
+        bool, Dict[Position, Optional[Value]], Optional[FailureReason]]:
         """
         Tries to evaluate the given content and update the sheet with its evaluation in the given position.
         Returns whether the update was successful, and if so - the values to update in the GUI.
@@ -313,15 +318,23 @@ class Sheet:
         # If the node's operator type is neither unary nor binary, raise an exception.
         raise EvaluationException(f"Unsupported operator type: {type(node.value)}")
 
-    def try_save_csv(self, file_name: str) -> bool:
+    def try_save(self, file_name: str) -> bool:
         """
-        Saves the sheet's current state as a CSV file, formatted like a table without explicit row and column indices.
-
+        Determine in which format to save the file.
         :param file_name: The path to the file where the sheet should be saved, can be absolute or relative.
         :return: True if the file was saved successfully, False otherwise.
         """
-        if not file_name.endswith(self.__CSV_EXTENSION):
-            return False
+        if file_name.endswith(self.__CSV_EXTENSION):
+            return self.save_as_csv(file_name)
+        if file_name.endswith(self.__JSON_EXTENSION):
+            return self.save_as_json(file_name)
+        # The file name doesn't contain valid extension
+        return False
+
+    def save_as_csv(self, file_name: str) -> bool:
+        """
+        Saves the sheet's current state as a CSV file, formatted like a table without explicit row and column indices.
+        """
         try:
             with open(file_name, mode='w', newline='') as file:
                 csv_writer = csv.writer(file)
@@ -339,3 +352,46 @@ class Sheet:
             cell_content = cell.get_content()
             grid[row_index][column_index] = cell_content if cell_content else ""
         return grid
+
+    def save_as_json(self, file_name: str) -> bool:
+        """
+        Saves the sheet's current state as a JSON file.
+        """
+        try:
+            with open(file_name, mode='w') as file:
+                json.dump(self.__to_json_format(), file, indent=4)
+            return True
+        except Exception:
+            return False
+
+    def __to_json_format(self) -> Dict[str, str]:
+        """
+        Converts stored sheet data to a dictionary suitable for JSON serialization.
+        """
+        print("json format")
+        data: Dict[str, str] = {}
+        for (row_index, column_index), cell in self.__cells.items():
+            cell_content = cell.get_content()
+            data[self.get_cell_name(column_index, row_index)] = cell_content
+            print(data)
+        return data
+
+    def parse_json_to_cells_values(self, file_name: str) -> bool:
+        """
+        Reads a JSON file containing cell-value pairs and parses it into cells_value.
+        :param file_name: The path to the JSON file.
+        :return: True upon success, False otherwise.
+        """
+        try:
+            with open(file_name, 'r') as file:
+                data = json.load(file)
+                for cell, value in data.items():
+                    row, column = self.__cell_name_to_location(cell)
+                    self.__cells_values[(row, column)] = Value(value)
+                return True
+        except FileNotFoundError:
+            print(f"Error: File '{file_name}' not found.")
+            return False
+        except json.JSONDecodeError:
+            print(f"Error: Failed to decode JSON data from file '{file_name}'.")
+            return False
