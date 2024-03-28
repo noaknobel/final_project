@@ -48,6 +48,10 @@ class Sheet:
     __A_ASCII = 65
     __COLUMN_PATTERN_GROUP = "column"
     __ROW_PATTERN_GROUP = "row"
+    __PATTERN_STR = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=__COLUMN_PATTERN_GROUP,
+                                                                     row=__ROW_PATTERN_GROUP)
+    __CELL_PATTERN: re.Pattern = re.compile(__PATTERN_STR)
+
     # Storage consts.
     __CSV_EXTENSION = '.csv'
     __JSON_EXTENSION = '.json'
@@ -55,17 +59,13 @@ class Sheet:
     ROWS_NUM: int = 20
     COLUMNS_NUM: int = 10
 
-    def __init__(self):
-        pattern_str = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=self.__COLUMN_PATTERN_GROUP,
-                                                                       row=self.__ROW_PATTERN_GROUP)
-        self.__CELL_PATTERN = re.compile(pattern_str)
-        self.__cell_name_pattern: re.Pattern = \
-            re.compile(fr"^(?P<{self.__COLUMN_PATTERN_GROUP}>[A-Z]+)(?P<{self.__ROW_PATTERN_GROUP}>[0-9]+)$")
+    def __init__(self, json_file: Optional[str] = None):
         # Sheet state:
+        self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
+                                         var_pattern=self.__CELL_PATTERN)
+
         self.__cells: Dict[Position, Cell] = {}
         self.__cells_values: Dict[Position, Value] = {}  # Allows retrieving values without reevaluation.
-        self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
-                                         var_pattern=self.__cell_name_pattern)
         self.__dependencies_graph = nx.DiGraph()  # Stores the dependencies between cells (formulas).
 
     def get_cell_content(self, row_index: int, column_index: int) -> Optional[str]:
@@ -179,7 +179,7 @@ class Sheet:
         return cell_content  # When the content is a simple string.
 
     @staticmethod
-    def __try_parse_number(value: str) -> Optional[bool]:
+    def __try_parse_number(value: str) -> Optional[float]:
         try:
             return float(value)
         except ValueError:
@@ -193,21 +193,22 @@ class Sheet:
         """
         return [node.value for node in node.preorder() if isinstance(node.value, str)]
 
-    def __cell_name_to_location(self, cell_name: str) -> Position:
+    @classmethod
+    def __cell_name_to_location(cls, cell_name: str) -> Position:
         """
         Convert a cell name (like 'A1', 'B2', etc.) to its corresponding row and column indices.
         :raises EvaluationException: If the cell name does not match the regular expression.
         :return: A tuple of a row index followed by a column index.
         """
-        match = self.__cell_name_pattern.match(cell_name)
+        match = cls.__CELL_PATTERN.match(cell_name)
         if not match:
             raise BadNameException(f"Invalid cell name format: {cell_name}")
         # Accessing named groups directly for better readability
-        column_part = match.group(self.__COLUMN_PATTERN_GROUP)
-        row_part = match.group(self.__ROW_PATTERN_GROUP)
+        column_part = match.group(cls.__COLUMN_PATTERN_GROUP)
+        row_part = match.group(cls.__ROW_PATTERN_GROUP)
         # Compute Ascii value of each letter in the column name.
-        column_ascii_list = [(ord(char) - self.__A_ASCII) for char in column_part]
-        column_index = sum([char_index * self.__NUMBER_OF_LETTERS + char_ascii
+        column_ascii_list = [(ord(char) - cls.__A_ASCII) for char in column_part]
+        column_index = sum([char_index * cls.__NUMBER_OF_LETTERS + char_ascii
                             for (char_index, char_ascii) in enumerate(column_ascii_list)])
         # Subtract one from row index to start from 0, and convert row_part from string to integer
         row_index = int(row_part) - 1
@@ -371,22 +372,26 @@ class Sheet:
             print(data)
         return data
 
-    def parse_json_to_cells_values(self, file_name: str) -> bool:
+    def __load_data_from_json(self, file_name: str) -> Dict[Position, Cell]:
         """
+        # TODO
         Reads a JSON file containing cell-value pairs and parses it into cells_value.
         :param file_name: The path to the JSON file.
         :return: True upon success, False otherwise.
         """
+        cells: Dict[Position, Cell] = {}
         try:
             with open(file_name, 'r') as file:
                 data = json.load(file)
                 for cell, value in data.items():
                     row, column = self.__cell_name_to_location(cell)
-                    self.__cells_values[(row, column)] = Value(value)
+                    cells[(row, column)] = Value(value)
                 return True
         except FileNotFoundError:
             print(f"Error: File '{file_name}' not found.")
             return False
         except json.JSONDecodeError:
             print(f"Error: Failed to decode JSON data from file '{file_name}'.")
+            return False
+        except Exception:
             return False
