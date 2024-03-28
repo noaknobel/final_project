@@ -1,3 +1,5 @@
 .idea/
 proj_venv
 src/__pycache__/
+*.json
+*.csv
