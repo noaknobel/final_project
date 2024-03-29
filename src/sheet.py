@@ -16,7 +16,6 @@ from node import Node
 
 
 # TODO - Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
-# TODO - Handle zero decision error message.
 
 class FailureReason(Enum):
     DEPENDENCIES_CYCLE = auto()
