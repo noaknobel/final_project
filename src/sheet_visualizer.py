@@ -2,7 +2,8 @@ import tkinter as tk
 from tkinter import messagebox
 from typing import Optional, List, Dict
 
-from sheet import Sheet, FailureReason, Value
+from failure_reason import FailureReason
+from sheet import Sheet, Value
 
 
 class SheetVisualizer:

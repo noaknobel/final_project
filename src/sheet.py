@@ -1,7 +1,6 @@
 import csv
 import json
 import re
-from enum import Enum, auto
 from typing import Dict, Tuple, Union, Optional, List, Set
 
 import networkx as nx
@@ -10,25 +9,17 @@ from cell import Cell
 from exceptions import CircularDependenciesException, ParserException, EvaluationException, BadNameException, \
     SheetLoadException
 from expression_parser import ExpressionParser
+from failure_reason import FailureReason
 from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator, \
     Max, Min, Sum, Average, RangeOperator
 from node import Node
 
-
-# TODO - Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
-
-class FailureReason(Enum):
-    DEPENDENCIES_CYCLE = auto()
-    COULD_NOT_PARSE = auto()
-    UNEXPECTED_EXCEPTION = auto()
-    EVALUATION_FAILURE = auto()
-    BAD_NAME_REFERENCE = auto()
-    ZERO_DIVISION = auto()
-
-
 Position = Tuple[int, int]  # (Row Index, Column Index)
 Content = Union[str, float, Node]
 Value = Union[str, float]
+
+
+# TODO - Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
 
 
 class Sheet:
