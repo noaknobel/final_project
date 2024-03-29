@@ -114,7 +114,7 @@ class SheetVisualizer:
         """
         Adds the sheet matrix to the GUI.
         Initializes the matrix of entries, enters the current state values to the view,
-         and bind each entry to GUI events.
+        and bind each entry to GUI events.
         """
         self.__sheet_entries: List[List[tk.Entry]] = [
             [tk.Entry(self.__root, width=10, font=self.__FONT) for _ in range(self.__sheet.COLUMNS_NUM)]
