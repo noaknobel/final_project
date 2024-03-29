@@ -104,7 +104,7 @@ class Sin(UnaryOperator):
 
 class Max(RangeOperator):
     def __init__(self):
-        super().__init__("max", 3)
+        super().__init__("max")
 
     def calculate(self, operands: list[float]):
         return max(operands)
@@ -112,7 +112,7 @@ class Max(RangeOperator):
 
 class Min(RangeOperator):
     def __init__(self):
-        super().__init__("min", 3)
+        super().__init__("min")
 
     def calculate(self, operands: list[float]):
         return min(operands)
@@ -120,7 +120,7 @@ class Min(RangeOperator):
 
 class Sum(RangeOperator):
     def __init__(self):
-        super().__init__("sum", 3)
+        super().__init__("sum")
 
     def calculate(self, operands: list[float]):
         return sum(operands)
@@ -128,7 +128,7 @@ class Sum(RangeOperator):
 
 class Average(RangeOperator):
     def __init__(self):
-        super().__init__("average", 3)
+        super().__init__("average")
 
     def calculate(self, operands: list[float]):
         return sum(operands)/len(operands)
