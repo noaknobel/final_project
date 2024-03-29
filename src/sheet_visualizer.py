@@ -26,6 +26,16 @@ class SheetVisualizer:
     # Column indexes.
     __ROW_INDEX_COLUMN = 0
     __FIRST_COLUMN_NAME_INDEX = 1
+    # Initializing mapping from error types to GUI strings as a dict.
+    # Note that a name error probably won't happen in practice since this case should fail during parsing.
+    __FAILURE_REASON_STRINGS: Dict[FailureReason, str] = {
+        FailureReason.COULD_NOT_PARSE: "Could Not Parse.",
+        FailureReason.DEPENDENCIES_CYCLE: "Dependency Cycle Detected.",
+        FailureReason.EVALUATION_FAILURE: "Failed to evaluate cell.",
+        FailureReason.BAD_NAME_REFERENCE: "Formula contained an invalid name.",
+        FailureReason.ZERO_DIVISION: "Cannot divide by zero.",
+        FailureReason.UNEXPECTED_EXCEPTION: "Aborted - Unexpected Exception."
+    }
 
     def __init__(self, sheet):
         self.__sheet: Sheet = sheet
@@ -36,16 +46,6 @@ class SheetVisualizer:
         self.__current_value_label = tk.Label(self.__root, text=self.__CURRENT_CELL_DEFAULT_STRING, font=self.__FONT)
         # Generate the grid of cells.
         self.__create_sheet_ui()
-        # Initializing mapping from error types to GUI strings as a dict.
-        # Note that a name error probably won't happen in practice since this case should fail during parsing.
-        self.__failure_reason_strings: Dict[FailureReason, str] = {
-            FailureReason.COULD_NOT_PARSE: "Could Not Parse.",
-            FailureReason.DEPENDENCIES_CYCLE: "Dependency Cycle Detected.",
-            FailureReason.EVALUATION_FAILURE: "Failed to evaluate cell.",
-            FailureReason.BAD_NAME_REFERENCE: "Formula contained an invalid name.",
-            FailureReason.ZERO_DIVISION: "Cannot divide by zero.",
-            FailureReason.UNEXPECTED_EXCEPTION: "Aborted - Unexpected Exception."
-        }
 
     def run(self):
         self.__root.mainloop()
@@ -193,11 +193,10 @@ class SheetVisualizer:
     @staticmethod
     def __value_to_show(value: Optional[Value]) -> Optional[str]:
         """Give a value in a sheet cell, return the string value that should be shown in the GUI."""
-        if value is None:
-            return ""
-        return str(value)
+        return "" if value is None else str(value)
 
-    def __update_failure_reason_label(self, failure_reason: FailureReason) -> None:
-        error_message = self.__failure_reason_strings.get(failure_reason, "An unknown error occurred.")
+    @classmethod
+    def __update_failure_reason_label(cls, failure_reason: FailureReason) -> None:
+        error_message = cls.__FAILURE_REASON_STRINGS.get(failure_reason, "An unknown error occurred.")
         # Display the error message in a popup message box.
         messagebox.showerror("Error", error_message)
