@@ -11,11 +11,12 @@ from exceptions import CircularDependenciesException, ParserException, Evaluatio
     SheetLoadException
 from expression_parser import ExpressionParser
 from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator, \
-    Max, Min, Sum, Average
+    Max, Min, Sum, Average, RangeOperator
 from node import Node
 
 
 # TODO - Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
+# TODO - Handle zero decision error message.
 
 class FailureReason(Enum):
     DEPENDENCIES_CYCLE = auto()
@@ -35,13 +36,17 @@ class Sheet:
     # Column names consts.
     __NUMBER_OF_LETTERS = 26
     __A_ASCII = 65
+    # Storing compiled regex patterns (identical in the class level), and regex groups to query later.
+    # Cell pattern.
+    __CELL_PATTERN: re.Pattern = re.compile("^(?P<column>[A-Z]+)(?P<row>[0-9]+)$")
     __COLUMN_PATTERN_GROUP = "column"
     __ROW_PATTERN_GROUP = "row"
-    __PATTERN_STR = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=__COLUMN_PATTERN_GROUP,
-                                                                     row=__ROW_PATTERN_GROUP)
-    __CELL_PATTERN: re.Pattern = re.compile(__PATTERN_STR)
-    __RANGE_NAME_PATTERN: re.Pattern = re.compile(
-        fr"^(?P<col1>[A-Z]+)(?P<row1>[0-9]+):(?P<col2>[A-Z]+)(?P<row2>[0-9]+)$")
+    # Cells range pattern.
+    __RANGE_NAME_PATTERN: re.Pattern = re.compile("^(?P<col1>[A-Z]+)(?P<row1>[0-9]+):(?P<col2>[A-Z]+)(?P<row2>[0-9]+)$")
+    __COL1_GROUP = "col1"
+    __COL2_GROUP = "col2"
+    __ROW1_GROUP = "row1"
+    __ROW2_GROUP = "row2"
 
     # Storage consts.
     __CSV_EXTENSION = '.csv'
@@ -181,7 +186,7 @@ class Sheet:
             return False, {}, FailureReason.COULD_NOT_PARSE
         except CircularDependenciesException:
             return False, {}, FailureReason.DEPENDENCIES_CYCLE
-        except Exception:
+        except Exception as e:
             return False, {}, FailureReason.UNEXPECTED_EXCEPTION
 
     def __get_dependencies(self, node: Node) -> Set[Position]:
@@ -189,8 +194,14 @@ class Sheet:
         Given a node, iterates over its string nodes returns set of positions.
         :raises EvaluationException: If a cell name cannot be converted to a position.
         """
-        cell_names: List[str] = self.__get_string_nodes(node)
-        return {self.__cell_name_to_location(d) for d in cell_names}
+        dependencies: Set[Position] = set()
+        for string_token in self.__get_string_nodes(node):
+            if self.__CELL_PATTERN.match(string_token):
+                dependencies.add(self.__cell_name_to_location(string_token))
+            elif self.__RANGE_NAME_PATTERN.match(string_token):
+                range_positions: Set[Position] = self.__calculate_range_positions(string_token)
+                dependencies.update(range_positions)
+        return dependencies
 
     def __delete_position(self, position: Position, dependent_positions: List[Position]):
         """Deletes cell data from the sheet if it is not a dependency of any other cell. If it doesn't exist - skip."""
@@ -239,13 +250,19 @@ class Sheet:
         # Accessing named groups directly for better readability
         column_part = match.group(cls.__COLUMN_PATTERN_GROUP)
         row_part = match.group(cls.__ROW_PATTERN_GROUP)
-        # Compute Ascii value of each letter in the column name.
-        column_ascii_list = [(ord(char) - cls.__A_ASCII) for char in column_part]
-        column_index = sum([char_index * cls.__NUMBER_OF_LETTERS + char_ascii
-                            for (char_index, char_ascii) in enumerate(column_ascii_list)])
-        # Subtract one from row index to start from 0, and convert row_part from string to integer
-        row_index = int(row_part) - 1
-        return row_index, column_index
+        return cls.__row_name_to_index(row_part), cls.__column_name_to_index(column_part)
+
+    @classmethod
+    def __row_name_to_index(cls, row_name: str):
+        """Subtract one from row index to start from 0, and convert row_part from string to integer"""
+        return int(row_name) - 1
+
+    @classmethod
+    def __column_name_to_index(cls, column_name: str):
+        """Compute Ascii value of each letter in the column name."""
+        column_ascii_list = [(ord(char) - cls.__A_ASCII) for char in column_name]
+        return sum([char_index * cls.__NUMBER_OF_LETTERS + char_ascii
+                    for (char_index, char_ascii) in enumerate(column_ascii_list)])
 
     def __get_updated_graph(self, position: Position,
                             position_dependencies: Optional[Set[Position]] = None) -> nx.DiGraph:
@@ -272,9 +289,7 @@ class Sheet:
     @staticmethod
     def __compute_dependencies(current_position: Position, dependency_graph: nx.DiGraph) -> List[Position]:
         """
-        Attempt a topological sort to check for cycles in the graph.
-        For further details on the algorithm, I recommend the following explanation:
-        https://www.youtube.com/watch?v=WqV-pxNUAYA.
+        Attempt a topological sort to check for cycles in the graph. # TODO - elaborate.
         :raises CircularDependenciesException: If there is a cycle in the graph.
         :return: The list of dependencies to evaluate in order to estimate the current position,
         and a list of the positions that are dependent on the current position, according to the topological-sort order.
@@ -285,9 +300,8 @@ class Sheet:
             total_order = list(nx.topological_sort(dependency_graph))
             # Derive dependents_update_order by using the reversed graph's total order.
             if current_position in dependency_graph:
-                reachable_from_current_in_reversed: Set[Position] = nx.descendants(dependency_graph.reverse(),
-                                                                                   current_position)
-                return [node for node in reversed(total_order) if node in reachable_from_current_in_reversed]
+                dependents: Set[Position] = nx.descendants(dependency_graph.reverse(), current_position)
+                return [position for position in reversed(total_order) if position in dependents]
             return []
         except nx.NetworkXUnfeasible:
             raise CircularDependenciesException("Cycle detected, new edges not added.")
@@ -334,11 +348,19 @@ class Sheet:
         """
         if not isinstance(node.value, MathOperator):
             raise EvaluationException(f"Unsupported node value: {node.value}")
+        if isinstance(node.value, RangeOperator):
+            if not (isinstance(node.right.value, str) and node.left is None):
+                raise EvaluationException("Problem evaluating a Range Operator node.")
+            range_positions: Set[Position] = self.__calculate_range_positions(node.right.value)
+            range_values: List[Value] = [self.__evaluate_position(position, cache) for position in range_positions]
+            if any(isinstance(v, str) for v in range_values):
+                raise EvaluationException("Can't run range functions on string operands.")
+            return node.value.calculate(range_values)
         # Retrieve values for left and right children if they exist.
-        left_val = self.__evaluate(node.left, cache) if node.left else None
-        right_val = self.__evaluate(node.right, cache) if node.right else None
-        if not isinstance(left_val, (float, int)) or not isinstance(left_val, (float, int)):
-            raise EvaluationException("All values in a formula evaluation must be numbers.")
+        left_val: Optional[Value] = self.__evaluate(node.left, cache) if node.left else None
+        right_val: Optional[Value] = self.__evaluate(node.right, cache) if node.right else None
+        if isinstance(left_val, str) or isinstance(left_val, str):
+            raise EvaluationException("Child nodes must have number evaluations.")
         # Handle unary and binary operations.
         if isinstance(node.value, UnaryOperator):
             if right_val is None:
@@ -400,12 +422,10 @@ class Sheet:
         """
         Converts stored sheet data to a dictionary suitable for JSON serialization.
         """
-        print("json format")
         data: Dict[str, str] = {}
         for (row_index, column_index), cell in self.__cells.items():
             cell_content = cell.get_content()
             data[self.get_cell_name(column_index, row_index)] = cell_content
-            print(data)
         return data
 
     def __load_data_from_json(self, json_file_name: str) -> Dict[Position, str]:
@@ -423,3 +443,21 @@ class Sheet:
                 row, column = self.__cell_name_to_location(cell_name)
                 cells[(row, column)] = cell_content
         return cells
+
+    @classmethod
+    def __calculate_range_positions(cls, range_value: str) -> Set[Position]:
+        match = cls.__RANGE_NAME_PATTERN.match(range_value)
+        if not match:
+            raise BadNameException(f"Invalid cells range name format: {range_value}")
+        row1_name = match.group(cls.__ROW1_GROUP)
+        col1_name = match.group(cls.__COL1_GROUP)
+        start_row_index, start_col_index = cls.__row_name_to_index(row1_name), cls.__column_name_to_index(col1_name)
+        row2_name = match.group(cls.__ROW2_GROUP)
+        col2_name = match.group(cls.__COL2_GROUP)
+        end_row_index, end_col_index = cls.__row_name_to_index(row2_name), cls.__column_name_to_index(col2_name)
+        # I return a set since the positions are unique.
+        if start_row_index == end_row_index and start_col_index <= end_col_index:
+            return {(start_row_index, col) for col in range(start_col_index, end_col_index + 1)}
+        elif start_col_index == end_col_index and start_row_index <= end_row_index:
+            return {(row, start_col_index) for row in range(start_row_index, end_row_index + 1)}
+        raise BadNameException("Range name is not a valid range.")

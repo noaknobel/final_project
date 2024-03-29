@@ -40,7 +40,7 @@ class SheetVisualizer:
         self.__failure_reason_strings: Dict[FailureReason, str] = {
             FailureReason.COULD_NOT_PARSE: "Could Not Parse.",
             FailureReason.DEPENDENCIES_CYCLE: "Dependency Cycle Detected.",
-            FailureReason.EVALUATION_FAILURE: "Failed to evaluate cell update.",
+            FailureReason.EVALUATION_FAILURE: "Failed to evaluate cell.",
             FailureReason.BAD_NAME_REFERENCE: "Formula contained an invalid name.",
             FailureReason.UNEXPECTED_EXCEPTION: "Aborted - Unexpected Exception."
         }

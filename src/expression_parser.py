@@ -289,7 +289,6 @@ class ExpressionParser:
         postfix: List[Union[str, MathOperator]] = self.__postfix(tokens)
         if len(postfix) == 0:
             raise ParserException("Postfix list is empty!")
-        print(postfix)
         stack = []
         for token in postfix:
             node = Node(token)
@@ -320,6 +319,7 @@ class ExpressionParser:
             raise ParserException("Bad range function call format.")
 
 
+# TODO - delete.
 if __name__ == '__main__':
     cell_name_pattern: re.Pattern = re.compile(fr"^(?P<row>[A-Z]+)(?P<col>[0-9]+)$")
     range_name_pattern: re.Pattern = re.compile(fr"^(?P<col1>[A-Z]+)(?P<row1>[0-9]+):(?P<col2>[A-Z]+)(?P<row2>[0-9]+)$")
