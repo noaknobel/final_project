@@ -24,6 +24,7 @@ class FailureReason(Enum):
     UNEXPECTED_EXCEPTION = auto()
     EVALUATION_FAILURE = auto()
     BAD_NAME_REFERENCE = auto()
+    ZERO_DIVISION = auto()
 
 
 Position = Tuple[int, int]  # (Row Index, Column Index)
@@ -186,7 +187,9 @@ class Sheet:
             return False, {}, FailureReason.COULD_NOT_PARSE
         except CircularDependenciesException:
             return False, {}, FailureReason.DEPENDENCIES_CYCLE
-        except Exception as e:
+        except ZeroDivisionError:
+            return False, {}, FailureReason.ZERO_DIVISION
+        except Exception:
             return False, {}, FailureReason.UNEXPECTED_EXCEPTION
 
     def __get_dependencies(self, node: Node) -> Set[Position]:

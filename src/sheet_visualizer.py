@@ -42,6 +42,7 @@ class SheetVisualizer:
             FailureReason.DEPENDENCIES_CYCLE: "Dependency Cycle Detected.",
             FailureReason.EVALUATION_FAILURE: "Failed to evaluate cell.",
             FailureReason.BAD_NAME_REFERENCE: "Formula contained an invalid name.",
+            FailureReason.ZERO_DIVISION: "Cannot divide by zero.",
             FailureReason.UNEXPECTED_EXCEPTION: "Aborted - Unexpected Exception."
         }
 
