@@ -393,7 +393,7 @@ class Sheet:
             return False
 
     def __to_csv_table(self) -> List[List[str]]:
-        """Convert stored sheet data to a matrix of string values. TODO - store only values."""
+        """Convert stored sheet data to a matrix of string values. TODO - handle "," in strings."""
         grid = [["" for _ in range(self.COLUMNS_NUM)] for _ in range(self.ROWS_NUM)]
         for (row_index, column_index), value in self.__cells_values.items():
             grid[row_index][column_index] = value
