@@ -1,21 +1,23 @@
 import re
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Tuple
 
 from exceptions import ParserException
-from math_operator import MathOperator, UnaryOperator, BinaryOperator, Associativity
+from math_operator import MathOperator, UnaryOperator, BinaryOperator, Associativity, RangeOperator
+from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, Max, Min, Sum, Average
 from node import Node
 
 
 class ExpressionParser:
     """Algebraic expression parser."""
 
-    def __init__(self, math_operators: List[MathOperator], var_pattern: re.Pattern) -> None:
+    def __init__(self, math_operators: List[MathOperator], var_pattern: re.Pattern, range_pattern: re.Pattern) -> None:
         """
         Initializes the ExpressionParser with a list of operators.
         :param math_operators: A list of Operator objects that are valid in the expressions this parser will parse.
         """
         self.__operators = math_operators
         self.__pattern = var_pattern
+        self.__range_pattern = range_pattern
 
     def __is_operator(self, token):
         """
@@ -27,7 +29,7 @@ class ExpressionParser:
 
     def __is_operand(self, string: str) -> bool:
         """Checks whether the given string is a valid operand."""
-        return self.__is_number(string) or self.__is_location(string)
+        return self.__is_number(string) or self.__is_location(string) or self.__is_range_token(string)
 
     def __is_location(self, string: str) -> bool:
         """
@@ -35,6 +37,9 @@ class ExpressionParser:
         which is a column string of capital letters, followed by a row number.
         """
         return bool(self.__pattern.match(string))
+
+    def __is_range_token(self, string: str) -> bool:
+        return bool(self.__range_pattern.match(string))
 
     @staticmethod
     def __is_number(var: str) -> bool:
@@ -154,9 +159,13 @@ class ExpressionParser:
         is_prev_operand = False
         is_prev_open_bracket = False
         # Updating the postfix tokens list and the operator stack for each given token.
-        for token in tokens:
-            is_prev_operand, is_prev_open_bracket = self.__process_token_postfix(token, operators_stack, tokens_postfix,
-                                                                                 is_prev_operand, is_prev_open_bracket)
+        token_index = 0
+        while token_index < len(tokens):
+            is_prev_operand, is_prev_open_bracket, token_index = self.__process_token_postfix(token_index, tokens,
+                                                                                              operators_stack,
+                                                                                              tokens_postfix,
+                                                                                              is_prev_operand,
+                                                                                              is_prev_open_bracket)
         # Handling the remaining tokens in the stack.
         while operators_stack:
             operator: Union[MathOperator, str] = operators_stack.pop()
@@ -167,12 +176,14 @@ class ExpressionParser:
             raise ParserException("The expression must end with an operand.")
         return tokens_postfix
 
-    def __process_token_postfix(self, token: str, operators_stack: List[str],
+    def __process_token_postfix(self, token_index: int, tokens: List[str], operators_stack: List[str],
                                 tokens_postfix: List[Union[str, MathOperator]],
-                                is_previous_token_operand: bool, is_previous_token_open_bracket: bool) -> (bool, bool):
+                                is_previous_token_operand: bool, is_previous_token_open_bracket: bool) -> Tuple[bool,
+                                                                                                                bool,
+                                                                                                                int]:
         """
         Processes a single token in the postfix logic.
-        :param token: The current token from the expression.
+        :param token: The current token from the expression. TODO - update doc of params.
         :param operators_stack: A stack (implemented as a list) holding operators and parentheses during conversion.
         :param tokens_postfix: The list accumulating the postfix representation tokens.
         :param is_previous_token_operand: Flag indicating if the preceding token in the sequence was an operand.
@@ -182,32 +193,38 @@ class ExpressionParser:
             These flags are returned so that the next iteration is aware of the previous token state.
         :raises ParserException: Whether the token's arrangement breaks rules.
         """
+        token = tokens[token_index]
         if self.__is_open_bracket(token):
             if is_previous_token_operand:
                 raise ParserException("An open bracket cannot directly follow an operand.")
             operators_stack.append(token)
-            return False, True
+            return False, True, token_index + 1
         if self.__is_close_bracket(token):
             if is_previous_token_open_bracket:
                 raise ParserException("Empty brackets are not allowed")
             self.__handle_close_bracket(token, operators_stack, tokens_postfix)
-            return True, False
+            return True, False, token_index + 1
         if self.__is_operator(token):
             operator = self.__find_operator(token, is_previous_token_operand)
             if operator is None:
                 raise ParserException("Invalid operator in expression.")
-            self.__handle_operator(operator, operators_stack, tokens_postfix)
-            return False, False
+            if isinstance(operator, RangeOperator):
+                self.__handle_range_func(operator, token_index, tokens, tokens_postfix)
+                token_index += 4
+                return True, False, token_index
+            else:
+                self.__handle_operator(operator, operators_stack, tokens_postfix)
+                return False, False, token_index + 1
         if self.__is_number(token):
             if is_previous_token_operand:
                 raise ParserException("Cannot have two operands in a row.")
             tokens_postfix.append(float(token))
-            return True, False
+            return True, False, token_index + 1
         if self.__is_location(token):
             if is_previous_token_operand:
                 raise ParserException("Cannot have two operands in a row.")
             tokens_postfix.append(token)
-            return True, False
+            return True, False, token_index + 1
         raise ParserException(f"Invalid token in expression: {token}")
 
     def __handle_close_bracket(self, close_bracket: str, operators_stack: List[Union[MathOperator, str]],
@@ -252,6 +269,10 @@ class ExpressionParser:
         :return: The Operator object if found, None otherwise.
         """
         filtered_operators = [op for op in self.__operators if op.symbol == token]
+
+        range_op = next((op for op in filtered_operators if isinstance(op, RangeOperator)), None)
+        if range_op is not None:
+            return range_op
         binary_op = next((op for op in filtered_operators if isinstance(op, BinaryOperator)), None)
         unary_op = next((op for op in filtered_operators if isinstance(op, UnaryOperator)), None)
         return binary_op if is_previous_character_operand and binary_op else unary_op
@@ -267,18 +288,43 @@ class ExpressionParser:
         postfix: List[Union[str, MathOperator]] = self.__postfix(tokens)
         if len(postfix) == 0:
             raise ParserException("Postfix list is empty!")
+        print(postfix)
         stack = []
         for token in postfix:
             node = Node(token)
             if isinstance(token, MathOperator):
-                if isinstance(token, UnaryOperator):
+                if isinstance(token, (UnaryOperator, RangeOperator)):
                     if len(stack) < 1:
                         raise ParserException("Unary operator has no operand.")
                     node.right = stack.pop()
-                if isinstance(token, BinaryOperator):
+                elif isinstance(token, BinaryOperator):
                     if len(stack) < 2:
                         raise ParserException("Binary operator doesn't have 2 operands.")
                     node.right = stack.pop()
                     node.left = stack.pop()
             stack.append(node)
         return stack.pop()
+
+    def __handle_range_func(self, operator: RangeOperator, token_index: int, tokens: List[str],
+                            tokens_postfix: List[Union[MathOperator, str]]) -> None:
+        # missing tokens - raise error
+        if token_index > len(tokens) - 4:
+            raise ParserException("missing range tokens.")
+        open_bracket, range_token, close_bracket = tokens[token_index + 1: token_index + 4]
+        if all([self.__is_open_bracket(open_bracket), self.__is_close_bracket(close_bracket),
+                self.__are_parentheses_pairs(open_bracket, close_bracket), self.__is_range_token(range_token)]):
+            tokens_postfix.append(range_token)
+            tokens_postfix.append(operator)
+        else:
+            raise ParserException("Bad range function call format.")
+
+
+if __name__ == '__main__':
+    cell_name_pattern: re.Pattern = re.compile(fr"^(?P<row>[A-Z]+)(?P<col>[0-9]+)$")
+    range_name_pattern: re.Pattern = re.compile(fr"^(?P<col1>[A-Z]+)(?P<row1>[0-9]+):(?P<col2>[A-Z]+)(?P<row2>[0-9]+)$")
+
+    parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power(),
+                                              Max(), Min(), Average(), Sum()],
+                              var_pattern=cell_name_pattern, range_pattern=range_name_pattern)
+    node = parser.syntax_tree("A1 + sum{A1:A3}")
+    print(node)

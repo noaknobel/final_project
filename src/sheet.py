@@ -10,13 +10,13 @@ from cell import Cell
 from exceptions import CircularDependenciesException, ParserException, EvaluationException, BadNameException, \
     SheetLoadException
 from expression_parser import ExpressionParser
-from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator
+from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator, \
+    Max, Min, Sum, Average
 from node import Node
 
 
 # TODO list
 #  Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
-
 #  2. Update GUI to support larger sheets, then check high column naming (also use "=AB13" in a formula).
 
 # TODO - deside what to do with strings in formulas.
@@ -54,6 +54,8 @@ class Sheet:
     __PATTERN_STR = '^(?P<{column}>[A-Z]+)(?P<{row}>[0-9]+)$'.format(column=__COLUMN_PATTERN_GROUP,
                                                                      row=__ROW_PATTERN_GROUP)
     __CELL_PATTERN: re.Pattern = re.compile(__PATTERN_STR)
+    __RANGE_NAME_PATTERN: re.Pattern = re.compile(
+        fr"^(?P<col1>[A-Z]+)(?P<row1>[0-9]+):(?P<col2>[A-Z]+)(?P<row2>[0-9]+)$")
 
     # Storage consts.
     __CSV_EXTENSION = '.csv'
@@ -69,12 +71,12 @@ class Sheet:
         :raise FileNotFoundError, json.JSONDecodeError, PermissionError, TypeError: If json read fails.
         :raise SheetLoadException: If json data cannot be loaded as a valid sheet.
         """
-        self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
-                                         var_pattern=self.__CELL_PATTERN)
+        self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power(),
+                                                         Max(), Min(), Sum(), Average()],
+                                         var_pattern=self.__CELL_PATTERN, range_pattern=self.__RANGE_NAME_PATTERN)
         self.__cells: Dict[Position, Cell] = {}
         self.__cells_values: Dict[Position, Value] = {}  # Allows retrieving values without reevaluation.
         self.__dependencies_graph = nx.DiGraph()  # Stores the dependencies between cells (formulas).
-
         if json_file is not None:
             # Raises errors to caller.
             data: Dict[Position, str] = self.__load_data_from_json(json_file)
@@ -393,7 +395,6 @@ class Sheet:
     def __to_csv_table(self) -> List[List[str]]:
         """Convert stored sheet data to a matrix of string values. TODO - store only values."""
         grid = [["" for _ in range(self.COLUMNS_NUM)] for _ in range(self.ROWS_NUM)]
-        print("DEBUGGGGG", self.__cells_values)
         for (row_index, column_index), value in self.__cells_values.items():
             grid[row_index][column_index] = value
         return grid

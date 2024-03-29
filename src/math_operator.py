@@ -35,7 +35,17 @@ class BinaryOperator(MathOperator):
         raise NotImplementedError
 
 
+class RangeOperator(MathOperator):
+    def __init__(self, symbol: str, precedence: int = 3, associativity: Associativity = Associativity.RTL):
+        super().__init__(symbol, precedence, associativity)
+
+    def calculate(self, operands: list[float]):
+        """This method should be implemented by specific unary operator subclasses"""
+        raise NotImplementedError
+
+
 # Implementing specific operators
+
 class Plus(BinaryOperator):
     def __init__(self):
         super().__init__("+", 1)
@@ -90,3 +100,35 @@ class Sin(UnaryOperator):
 
     def calculate(self, operand):
         return math.sin(operand)
+
+
+class Max(RangeOperator):
+    def __init__(self):
+        super().__init__("max", 3)
+
+    def calculate(self, operands: list[float]):
+        return max(operands)
+
+
+class Min(RangeOperator):
+    def __init__(self):
+        super().__init__("min", 3)
+
+    def calculate(self, operands: list[float]):
+        return min(operands)
+
+
+class Sum(RangeOperator):
+    def __init__(self):
+        super().__init__("sum", 3)
+
+    def calculate(self, operands: list[float]):
+        return sum(operands)
+
+
+class Average(RangeOperator):
+    def __init__(self):
+        super().__init__("average", 3)
+
+    def calculate(self, operands: list[float]):
+        return sum(operands)/len(operands)

@@ -1,1 +1,29 @@
 # final_project
+
+readme_content = """
+# Excel-Like Sheet Project
+
+## Overview
+This project implements an Excel-like spreadsheet application designed for managing, calculating, and analyzing data
+through a user-friendly interface. It supports a wide range of mathematical and logical formulas, providing a powerful
+tool for personal and professional use.
+
+## Expansions
+- **Graphical User Interface (GUI)**: A robust GUI for intuitive interaction with the spreadsheet, including visual feedback for cell selection and formula application.
+- **Complex Functions**:
+    - sinus, power.
+    - including associativity, precedence.
+- **Export to csv**
+- **Type annotation**:
+
+## Complex programming
+- **Exceptions handling**: enum of false
+- **Modularity and
+
+## Features
+- **Cell Operations**: Enter and edit data directly in the cells, with support for text, numbers, and formulas.
+- **Formulas**: Use built-in formulas like SUM, AVERAGE, MAX, MIN, and custom expressions to perform calculations across cells.
+- **Spreadsheet Functions**: Navigate through cells, copy-paste data, and apply formatting options to organize your data efficiently.
+- **Graphical User Interface (GUI)**: A robust GUI for intuitive interaction with the spreadsheet, including visual feedback for cell selection and formula application.
+- **Error Handling**: Comprehensive error checking for formula parsing, circular references, and execution to ensure data integrity.
+- **File Operations**: Save and load your work in various formats, including CSV and JSON, for easy data exchange and persistence.
