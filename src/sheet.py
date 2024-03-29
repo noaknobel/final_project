@@ -15,21 +15,7 @@ from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOp
 from node import Node
 
 
-# TODO list
-#  Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
-#  2. Update GUI to support larger sheets, then check high column naming (also use "=AB13" in a formula).
-
-# TODO - deside what to do with strings in formulas.
-#  handle string + float case, and define string + string or string * int behavior.
-#  It acts wierd and only sometimes work.
-#  Currently I simply do not allow string values in formulas.
-#  After a check, I think it works for assignment only, like A1="=B1", B1="asd".
-#  Analyze when do I raise an error for strings in formulas and when do I not.
-
-# TODO - refactor long try-catch flow (I don't have a good idea).
-
-# TODO - explain in readme and in video why backend sheet is catching all exceptions instead of handling them inside
-#  the GUI.
+# TODO - Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
 
 class FailureReason(Enum):
     DEPENDENCIES_CYCLE = auto()

@@ -183,7 +183,8 @@ class ExpressionParser:
                                                                                                                 int]:
         """
         Processes a single token in the postfix logic.
-        :param token: The current token from the expression. TODO - update doc of params.
+        :param token_index: index of the current token in the tokens list.
+        :param tokens: The list of tokens in the formula.
         :param operators_stack: A stack (implemented as a list) holding operators and parentheses during conversion.
         :param tokens_postfix: The list accumulating the postfix representation tokens.
         :param is_previous_token_operand: Flag indicating if the preceding token in the sequence was an operand.
