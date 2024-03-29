@@ -282,7 +282,8 @@ class Sheet:
     @staticmethod
     def __compute_dependencies(current_position: Position, dependency_graph: nx.DiGraph) -> List[Position]:
         """
-        Attempt a topological sort to check for cycles in the graph. # TODO - elaborate.
+        Attempt a topological sort to check for cycles in the graph.
+        It allows use to iterate the dependency according to the dependency order in the graph.
         :raises CircularDependenciesException: If there is a cycle in the graph.
         :return: The list of dependencies to evaluate in order to estimate the current position,
         and a list of the positions that are dependent on the current position, according to the topological-sort order.

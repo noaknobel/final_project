@@ -317,15 +317,3 @@ class ExpressionParser:
             tokens_postfix.append(operator)
         else:
             raise ParserException("Bad range function call format.")
-
-
-# TODO - delete.
-if __name__ == '__main__':
-    cell_name_pattern: re.Pattern = re.compile(fr"^(?P<row>[A-Z]+)(?P<col>[0-9]+)$")
-    range_name_pattern: re.Pattern = re.compile(fr"^(?P<col1>[A-Z]+)(?P<row1>[0-9]+):(?P<col2>[A-Z]+)(?P<row2>[0-9]+)$")
-
-    parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power(),
-                                              Max(), Min(), Average(), Sum()],
-                              var_pattern=cell_name_pattern, range_pattern=range_name_pattern)
-    node = parser.syntax_tree("A1 + sum{A1:A3}")
-    print(node)
