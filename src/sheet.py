@@ -7,13 +7,16 @@ from typing import Dict, Tuple, Union, Optional, List, Set
 import networkx as nx
 
 from cell import Cell
-from exceptions import CircularDependenciesException, ParserException, EvaluationException, BadNameException
+from exceptions import CircularDependenciesException, ParserException, EvaluationException, BadNameException, \
+    SheetLoadException
 from expression_parser import ExpressionParser
 from math_operator import Plus, Minus, Times, Divide, Negate, Sin, Power, MathOperator, UnaryOperator, BinaryOperator
 from node import Node
 
 
 # TODO list
+#  Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
+
 #  2. Update GUI to support larger sheets, then check high column naming (also use "=AB13" in a formula).
 
 # TODO - deside what to do with strings in formulas.
@@ -60,13 +63,52 @@ class Sheet:
     COLUMNS_NUM: int = 10
 
     def __init__(self, json_file: Optional[str] = None):
-        # Sheet state:
+        """
+        A class that holds sheet data. It allows updates and storage to files.
+        :param json_file: If given, load the initial data from a json file.
+        :raise FileNotFoundError, json.JSONDecodeError, PermissionError, TypeError: If json read fails.
+        :raise SheetLoadException: If json data cannot be loaded as a valid sheet.
+        """
         self.__parser = ExpressionParser(math_operators=[Plus(), Minus(), Times(), Divide(), Negate(), Sin(), Power()],
                                          var_pattern=self.__CELL_PATTERN)
-
         self.__cells: Dict[Position, Cell] = {}
         self.__cells_values: Dict[Position, Value] = {}  # Allows retrieving values without reevaluation.
         self.__dependencies_graph = nx.DiGraph()  # Stores the dependencies between cells (formulas).
+
+        if json_file is not None:
+            # Raises errors to caller.
+            data: Dict[Position, str] = self.__load_data_from_json(json_file)
+            self.__cells: Dict[Position, Cell] = {position: Cell(content, self.__parse_content(content)) for
+                                                  position, content in data.items()}
+            self.__dependencies_graph, self.__cells_values = self.__evaluate_cells(self.__cells)
+
+    def __evaluate_cells(self, cells: Dict[Position, Cell]):
+        """
+        Initial cells evaluation - evaluate all loaded cells in a single computations.
+        Takes into consideration graph cycles and evaluation by the reverse topological order of the dependencies,
+        i.e. evaluating each item only after its dependencies are evaluated.
+        """
+        dependency_graph = nx.DiGraph()
+        for position, cell in cells.items():
+            content = cell.get_parsed_content()
+            dependencies = self.__get_dependencies(content) if isinstance(content, Node) else set()
+            graph_edges = [(position, dependency) for dependency in dependencies]
+            dependency_graph.add_edges_from(graph_edges)
+            try:
+                list(nx.topological_sort(dependency_graph))
+            except nx.NetworkXUnfeasible:
+                raise CircularDependenciesException("Cycle detected, new edges not added.")
+        for position in cells.keys():
+            # Adding all positions given, so all cells weill be evaluated, even if they don't have any dependencies.
+            # Will remove isolates from graph later.
+            dependency_graph.add_node(position)
+        # Each item depends only on previous items in the order. There are no cycles at this point.
+        reverse_topological_order: List[Position] = list(nx.topological_sort(dependency_graph.reverse()))
+        values: Dict[Position, Value] = {}
+        for position in reverse_topological_order:
+            values[position] = self.__evaluate_position(position, values)
+        self.__remove_isolates(dependency_graph)
+        return dependency_graph, values
 
     def get_cell_content(self, row_index: int, column_index: int) -> Optional[str]:
         """Get the content of the cell."""
@@ -112,19 +154,14 @@ class Sheet:
 
         Note - If there is a None value in the dict of updated positions returned, it means that the cell was deleted.
         It happens when given an empty string, which means deleting the cell.
-        This is done so we won't store empty / deleted values.
+        This is done to not store empty / deleted values.
         """
-        print(self.__cells_values)
         try:
             current_position: Position = (row_index, col_index)
             content: Content = self.__parse_content(written_content)
 
             # Compute dependents to update, and validate no cycles in the dependency graph.
-            updated_position_dependencies = set()
-            if isinstance(content, Node):
-                cell_names: List[str] = self.__get_string_nodes(content)
-                # Raises EvaluationException if a cell name cannot be converted to a position.
-                updated_position_dependencies: Set[Position] = {self.__cell_name_to_location(d) for d in cell_names}
+            updated_position_dependencies = self.__get_dependencies(content) if isinstance(content, Node) else set()
             new_dependency_graph: nx.DiGraph = self.__get_updated_graph(current_position, updated_position_dependencies)
             dependents_to_reevaluate: List[Position] = self.__compute_dependencies(current_position,
                                                                                    new_dependency_graph)
@@ -158,6 +195,14 @@ class Sheet:
             return False, {}, FailureReason.DEPENDENCIES_CYCLE
         except Exception:
             return False, {}, FailureReason.UNEXPECTED_EXCEPTION
+
+    def __get_dependencies(self, node: Node) -> Set[Position]:
+        """
+        Given a node, iterates over its string nodes returns set of positions.
+        :raises EvaluationException: If a cell name cannot be converted to a position.
+        """
+        cell_names: List[str] = self.__get_string_nodes(node)
+        return {self.__cell_name_to_location(d) for d in cell_names}
 
     def __delete_position(self, position: Position, dependent_positions: List[Position]):
         """Deletes cell data from the sheet if it is not a dependency of any other cell. If it doesn't exist - skip."""
@@ -227,10 +272,14 @@ class Sheet:
         # Update new dependencies and remove deleted dependencies from the temporary graph.
         new_dependency_graph.remove_edges_from(list(new_dependency_graph.out_edges(position)))
         new_dependency_graph.add_edges_from(updated_edges)
-        # Find all isolated items (nodes with no edges) and remove them, since they no longer have any meaning.
-        isolated_items = list(nx.isolates(new_dependency_graph))
-        new_dependency_graph.remove_edges_from(isolated_items)
+        self.__remove_isolates(new_dependency_graph)
         return new_dependency_graph
+
+    @staticmethod
+    def __remove_isolates(dependency_graph: nx.DiGraph):
+        """Find all isolated items (nodes with no edges) and remove them, since they no longer have any meaning."""
+        isolated_items = list(nx.isolates(dependency_graph))
+        dependency_graph.remove_edges_from(isolated_items)
 
     @staticmethod
     def __compute_dependencies(current_position: Position, dependency_graph: nx.DiGraph) -> List[Position]:
@@ -321,13 +370,13 @@ class Sheet:
         :return: True if the file was saved successfully, False otherwise.
         """
         if file_name.endswith(self.__CSV_EXTENSION):
-            return self.save_as_csv(file_name)
+            return self.__save_as_csv(file_name)
         if file_name.endswith(self.__JSON_EXTENSION):
-            return self.save_as_json(file_name)
+            return self.__save_as_json(file_name)
         # The file name doesn't contain valid extension
         return False
 
-    def save_as_csv(self, file_name: str) -> bool:
+    def __save_as_csv(self, file_name: str) -> bool:
         """
         Saves the sheet's current state as a CSV file, formatted like a table without explicit row and column indices.
         """
@@ -342,14 +391,14 @@ class Sheet:
             return False
 
     def __to_csv_table(self) -> List[List[str]]:
-        """Convert stored sheet data to a matrix of string values."""
+        """Convert stored sheet data to a matrix of string values. TODO - store only values."""
         grid = [["" for _ in range(self.COLUMNS_NUM)] for _ in range(self.ROWS_NUM)]
-        for (row_index, column_index), cell in self.__cells.items():
-            cell_content = cell.get_content()
-            grid[row_index][column_index] = cell_content if cell_content else ""
+        print("DEBUGGGGG", self.__cells_values)
+        for (row_index, column_index), value in self.__cells_values.items():
+            grid[row_index][column_index] = value
         return grid
 
-    def save_as_json(self, file_name: str) -> bool:
+    def __save_as_json(self, file_name: str) -> bool:
         """
         Saves the sheet's current state as a JSON file.
         """
@@ -372,26 +421,18 @@ class Sheet:
             print(data)
         return data
 
-    def __load_data_from_json(self, file_name: str) -> Dict[Position, Cell]:
+    def __load_data_from_json(self, json_file_name: str) -> Dict[Position, str]:
         """
-        # TODO
-        Reads a JSON file containing cell-value pairs and parses it into cells_value.
-        :param file_name: The path to the JSON file.
-        :return: True upon success, False otherwise.
+        Parses sheet data from a json file.
+        :param json_file_name: The path to the JSON file.
+        :return: A mapping between cell positions in the sheet and Cell instances.
         """
-        cells: Dict[Position, Cell] = {}
-        try:
-            with open(file_name, 'r') as file:
-                data = json.load(file)
-                for cell, value in data.items():
-                    row, column = self.__cell_name_to_location(cell)
-                    cells[(row, column)] = Value(value)
-                return True
-        except FileNotFoundError:
-            print(f"Error: File '{file_name}' not found.")
-            return False
-        except json.JSONDecodeError:
-            print(f"Error: Failed to decode JSON data from file '{file_name}'.")
-            return False
-        except Exception:
-            return False
+        cells: Dict[Position, str] = {}
+        with open(json_file_name, "r") as file:
+            data: Dict[str, str] = json.load(file)
+            for cell_name, cell_content in data.items():
+                if not isinstance(cell_name, str) or not isinstance(cell_content, str):
+                    raise SheetLoadException("Json file must contain string keys and string values only.")
+                row, column = self.__cell_name_to_location(cell_name)
+                cells[(row, column)] = cell_content
+        return cells

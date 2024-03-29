@@ -16,3 +16,8 @@ class EvaluationException(Exception):
 class BadNameException(Exception):
     """A failure to evaluate a cell due to missing / invalid cell name."""
     pass
+
+
+class SheetLoadException(Exception):
+    """A failure during the loading of a sheet file."""
+    pass

@@ -120,10 +120,8 @@ class SheetVisualizer:
         ]
         for row_index, entries_row in enumerate(self.__sheet_entries):
             for col_index, entry in enumerate(entries_row):
-                # TODO: Load json.
-                #  Change to "evaluate all" method, that also validate ok input json.
-                #  value: Optional[Union[str, float]] = self.sheet.evaluate_position(row_index, col_index)
-                #  entry.insert(tk.END, value if value is not None else "")  # check this.
+                value: Optional[Value] = self.__sheet.get_value(row_index, col_index)
+                entry.insert(tk.END, self.__value_to_show(value))
                 self.__bind_entry_events(entry, row_index, col_index)
                 # Add the entry to the table view.
                 entry.grid(row=row_index + self.__FIRST_SPREADSHEET_ROW,
