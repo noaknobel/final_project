@@ -19,9 +19,6 @@ Content = Union[str, float, Node]
 Value = Union[str, float]
 
 
-# TODO - Validate position in range, in the evaluation. if not 0 <= row < cls.ROWS_NUM x
-
-
 class Sheet:
     __EQUATION_PREFIX = "="
     # Column names consts.
@@ -243,7 +240,10 @@ class Sheet:
         # Accessing named groups directly for better readability
         column_part = match.group(cls.__COLUMN_PATTERN_GROUP)
         row_part = match.group(cls.__ROW_PATTERN_GROUP)
-        return cls.__row_name_to_index(row_part), cls.__column_name_to_index(column_part)
+        position = (cls.__row_name_to_index(row_part), cls.__column_name_to_index(column_part))
+        if not cls.__position_in_sheet_range(position):
+            raise BadNameException("Cell indexes outside of range.")
+        return position
 
     @classmethod
     def __row_name_to_index(cls, row_name: str):
@@ -394,10 +394,10 @@ class Sheet:
             return False
 
     def __to_csv_table(self) -> List[List[str]]:
-        """Convert stored sheet data to a matrix of string values. TODO - handle "," in strings."""
+        """Convert stored sheet data to a matrix of string values."""
         grid = [["" for _ in range(self.COLUMNS_NUM)] for _ in range(self.ROWS_NUM)]
         for (row_index, column_index), value in self.__cells_values.items():
-            grid[row_index][column_index] = value
+            grid[row_index][column_index] = f'"{value}"' if isinstance(value, str) and "," in value else value
         return grid
 
     def __save_as_json(self, file_name: str) -> bool:
@@ -444,13 +444,22 @@ class Sheet:
             raise BadNameException(f"Invalid cells range name format: {range_value}")
         row1_name = match.group(cls.__ROW1_GROUP)
         col1_name = match.group(cls.__COL1_GROUP)
-        start_row_index, start_col_index = cls.__row_name_to_index(row1_name), cls.__column_name_to_index(col1_name)
+        start_position = cls.__row_name_to_index(row1_name), cls.__column_name_to_index(col1_name)
+        start_row_index, start_col_index = start_position
         row2_name = match.group(cls.__ROW2_GROUP)
         col2_name = match.group(cls.__COL2_GROUP)
-        end_row_index, end_col_index = cls.__row_name_to_index(row2_name), cls.__column_name_to_index(col2_name)
+        end_position = cls.__row_name_to_index(row2_name), cls.__column_name_to_index(col2_name)
+        end_row_index, end_col_index = end_position
         # I return a set since the positions are unique.
+        if not (cls.__position_in_sheet_range(start_position) and cls.__position_in_sheet_range(end_position)):
+            raise BadNameException("Range is not inside the sheet.")
         if start_row_index == end_row_index and start_col_index <= end_col_index:
             return {(start_row_index, col) for col in range(start_col_index, end_col_index + 1)}
         elif start_col_index == end_col_index and start_row_index <= end_row_index:
             return {(row, start_col_index) for row in range(start_row_index, end_row_index + 1)}
         raise BadNameException("Range name is not a valid range.")
+
+    @classmethod
+    def __position_in_sheet_range(cls, position: Position) -> bool:
+        row, col = position
+        return 0 <= row < cls.ROWS_NUM and 0 <= col < cls.COLUMNS_NUM
