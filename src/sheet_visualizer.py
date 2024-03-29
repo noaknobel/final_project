@@ -168,10 +168,12 @@ class SheetVisualizer:
         self.__current_value_label.config(text=f"Content: {content}")
 
     def __focus_out_cell(self, entry: tk.Entry, row_index: int, col_index: int):
+        """Callback when focus out of entry cell."""
         self.__clear_current_cell_header_view()
         self.__store_and_evaluate_cell(entry, row_index, col_index)
 
     def __clear_current_cell_header_view(self):
+        """A method that clears the labels of the current cell in the header."""
         self.__current_cell_label.config(text=self.__CURRENT_CELL_DEFAULT_STRING)
         self.__current_value_label.config(text=self.__CURRENT_CELL_DEFAULT_STRING)
 
@@ -188,7 +190,7 @@ class SheetVisualizer:
         else:
             old_value = self.__sheet.get_value(row_index, col_index)
             self.__update_entry_text(entry, self.__value_to_show(old_value))
-            self.__update_failure_reason_label(failure_reason)
+            self.__show_failure_reason_message_box(failure_reason)
 
     @staticmethod
     def __value_to_show(value: Optional[Value]) -> Optional[str]:
@@ -196,7 +198,8 @@ class SheetVisualizer:
         return "" if value is None else str(value)
 
     @classmethod
-    def __update_failure_reason_label(cls, failure_reason: FailureReason) -> None:
+    def __show_failure_reason_message_box(cls, failure_reason: FailureReason) -> None:
+        """Pop an error message box on the screen with the relevant error message to the given failure reason."""
         error_message = cls.__FAILURE_REASON_STRINGS.get(failure_reason, "An unknown error occurred.")
         # Display the error message in a popup message box.
         messagebox.showerror("Error", error_message)
