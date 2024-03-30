@@ -214,7 +214,14 @@ class SheetVisualizer:
     @staticmethod
     def __value_to_show(value: Optional[Value]) -> Optional[str]:
         """Give a value in a sheet cell, return the string value that should be shown in the GUI."""
-        return "" if value is None else str(value)
+        if value is None:
+            return ""
+        elif isinstance(value, float) and len(str(value)) > 10:
+            # If str(value) is larger than the cell view (typically on a laptop it is 10 digits),
+            # it may show something like "1.123456789e-10" but won't be understood since the "e-10" cut from the view.
+            # Therefore, in that case I chose to restrict the shown value to be in float representation of 10 digits.
+            return f"{value:.10f}".rstrip("0").rstrip(".").lstrip(" ")
+        return str(value)
 
     @classmethod
     def __show_failure_reason_message_box(cls, failure_reason: FailureReason) -> None:
