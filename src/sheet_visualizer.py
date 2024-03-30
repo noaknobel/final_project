@@ -7,6 +7,17 @@ from sheet import Sheet, Value
 
 
 class SheetVisualizer:
+    """
+    Provides a graphical user interface for interacting with a Sheet instance.
+    Allows users to view, modify, and save spreadsheet data through a Tkinter-based GUI.
+
+    Attributes:
+        __sheet (Sheet): The Sheet instance being visualized and interacted with.
+        __root (tk.Tk): The root Tkinter window for the GUI.
+        __current_cell_label (tk.Label): Label displaying the currently selected cell.
+        __current_value_label (tk.Label): Label displaying the current value of the selected cell.
+        __sheet_entries (List[List[tk.Entry]]): A matrix of Tkinter Entry widgets representing the spreadsheet cells.
+    """
     __SPREADSHEET_TITLE = "Sheet Visualizer"
     __SPREADSHEET_NAME = "Noa's Spreadsheet"
     __USER_NAME_LABEL = "Sheet Name:"
@@ -38,6 +49,11 @@ class SheetVisualizer:
     }
 
     def __init__(self, sheet):
+        """
+        Initializes the SheetVisualizer with a given Sheet instance, setting up the GUI elements.
+
+        :param sheet: The Sheet instance to visualize and interact with.
+        """
         self.__sheet: Sheet = sheet
         # Init root tk object.
         self.__root = tk.Tk()
@@ -48,11 +64,14 @@ class SheetVisualizer:
         self.__create_sheet_ui()
 
     def run(self):
+        """
+        Starts the Tkinter main loop, displaying the GUI and allowing user interaction.
+        """
         self.__root.mainloop()
 
     def __create_sheet_ui(self) -> None:
         """
-        Initialize GUI of sheet.
+        Sets up the initial GUI layout, including the spreadsheet header and cell grid.
         """
         self.__root.title(self.__SPREADSHEET_TITLE)  # Set the title in the upper left corner of the view.
         self.__add_gui_sheet_header()
@@ -76,7 +95,7 @@ class SheetVisualizer:
 
     def __add_gui_sheet_header(self) -> None:
         """
-        Adds GUI header components such as the title, save button, current cell presentation, etc.
+        Adds the spreadsheet's header elements to the GUI, including the title and save button.
         """
         # Add title
         title_label = tk.Label(self.__root, text=self.__SPREADSHEET_NAME, font=self.__TITLE_FONT, fg=self.__TITLE_COLOR)

@@ -7,7 +7,44 @@ from node import Node
 
 
 class ExpressionParser:
-    """Algebraic expression parser."""
+    """
+    Algebraic expression parser that converts algebraic expressions into a syntax tree or postfix notation.
+
+    This parser supports a wide range of mathematical operations, including unary and binary operators, and
+    special functionalities such as range operations within a specified context (e.g., spreadsheet formulas).
+    It can handle complex expressions involving variables, numbers, and predefined functions, encapsulated
+    within a flexible and extendable architecture. The parser is designed to work closely with custom `Node`
+    objects representing individual components of the syntax tree for further evaluation or manipulation.
+
+    The initialization of the parser requires a list of mathematical operators, which define the operational
+    context, and regular expression patterns for identifying variables and ranges within the expressions.
+    This design allows for easy adaptation to different contexts and customizability of the parsing logic.
+
+    Usage involves creating an instance of the `ExpressionParser` with the desired configuration and then
+    invoking the `syntax_tree` method with the algebraic expression to parse. The result is a `Node` object
+    that represents the root of the syntax tree, ready for evaluation or analysis.
+
+    Example:
+        math_operators = [BinaryOperator("+", 1, Associativity.LTR), UnaryOperator("-", 2, Associativity.RTL)]
+        var_pattern = re.compile(r"^[A-Z]+[0-9]+$")
+        range_pattern = re.compile(r"^[A-Z]+[0-9]+:[A-Z]+[0-9]+$")
+        parser = ExpressionParser(math_operators, var_pattern, range_pattern)
+        root_node = parser.syntax_tree("A1+B2")
+
+    Note:
+        The class is part of a larger system for parsing and evaluating algebraic expressions, typically
+        used within applications like spreadsheet software or custom calculation tools.
+
+    Attributes:
+        __operators (List[MathOperator]): A list of Operator objects that are valid in the expressions
+            this parser will parse.
+        __pattern (re.Pattern): A compiled regular expression used to match variable locations within
+            the expressions.
+        __range_pattern (re.Pattern): A compiled regular expression used to match range expressions.
+
+    Raises:
+        ParserException: If the expression is invalid or cannot be parsed into a valid syntax tree.
+    """
 
     def __init__(self, math_operators: List[MathOperator], var_pattern: re.Pattern, range_pattern: re.Pattern) -> None:
         """
@@ -306,7 +343,19 @@ class ExpressionParser:
 
     def __handle_range_func(self, operator: RangeOperator, token_index: int, tokens: List[str],
                             tokens_postfix: List[Union[MathOperator, str]]) -> None:
-        # missing tokens - raise error
+        """
+       Validates and appends a range function to the postfix tokens list.
+
+       Ensures the range function, starting at `token_index`, follows the correct structure:
+       an opening bracket, a valid range token, and a closing bracket. If valid, appends the
+       range token and its operator to `tokens_postfix`.
+
+       :param operator: The RangeOperator to process.
+       :param token_index: Index of the range operator in `tokens`.
+       :param tokens: List of all tokens from the expression.
+       :param tokens_postfix: Postfix tokens list being populated.
+       :raises ParserException: If the range function format is incorrect or tokens are missing.
+       """
         if token_index > len(tokens) - 4:
             raise ParserException("missing range tokens.")
         open_bracket, range_token, close_bracket = tokens[token_index + 1: token_index + 4]

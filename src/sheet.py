@@ -20,6 +20,43 @@ Value = Union[str, float]
 
 
 class Sheet:
+    """
+    Represents a spreadsheet, encapsulating data storage, formula parsing, evaluation, and cell dependency management.
+    Provides functionalities to update cell contents with values or formulas, evaluate those formulas considering
+    cell dependencies to prevent cycles, and save or load the spreadsheet data to and from file formats such as CSV
+    and JSON.
+
+    The class uses an ExpressionParser for parsing and evaluating cell formulas, leveraging a directed graph to track
+    cell dependencies and ensure updates are processed in a way that respects these dependencies without creating cycles.
+
+    Attributes:
+        __EQUATION_PREFIX (str): Prefix indicating a string should be interpreted as a formula.
+        __NUMBER_OF_LETTERS (int): Used for converting column letters to indices.
+        __A_ASCII (int): ASCII value of 'A', used as a base for column letter to index conversions.
+        __CELL_PATTERN (re.Pattern): Regex pattern to validate and parse cell references.
+        __RANGE_NAME_PATTERN (re.Pattern): Regex pattern for validating and parsing cell range references.
+        ROWS_NUM (int): Number of rows in the spreadsheet.
+        COLUMNS_NUM (int): Number of columns in the spreadsheet.
+        __parser (ExpressionParser): Parser for evaluating cell formulas.
+        __cells (Dict[Position, Cell]): Mapping from cell positions to Cell objects.
+        __cells_values (Dict[Position, Value]): Cache of evaluated cell values.
+        __dependencies_graph (nx.DiGraph): Directed graph tracking dependencies between cells to manage formula evaluations.
+
+    The class supports dynamic cell content updates, including direct values and formulas. Formulas can reference
+    other cells and include built-in operations and functions. The spreadsheet automatically recalculates dependent
+    cell values when a cell is updated, ensuring data consistency.
+
+    Methods:
+        __init__: Initializes a new Sheet instance, optionally loading data from a JSON file.
+        get_cell_content: Retrieves the raw content of a specified cell.
+        get_value: Fetches the evaluated value of a specified cell.
+        try_update: Attempts to update a cell's content, recalculating dependent cell values as necessary.
+        try_save: Saves the spreadsheet data to a file in CSV or JSON format.
+
+    The Sheet class is designed to be flexible and extendable, supporting additional functionalities such as
+    adding new cell functions, extending file format support, and increasing the grid size beyond the initial
+    fixed dimensions.
+    """
     __EQUATION_PREFIX = "="
     # Column names consts.
     __NUMBER_OF_LETTERS = 26
@@ -121,6 +158,9 @@ class Sheet:
         return name
 
     def get_cell_name(self, col_index: int, row_index: int) -> str:
+        """
+        Generates the conventional spreadsheet cell name from given row and column indices.
+        """
         row_name: str = self.row_index_to_name(row_index)
         col_name: str = self.column_index_to_name(col_index)
         return f"{col_name}{row_name}"
@@ -214,6 +254,9 @@ class Sheet:
 
     @staticmethod
     def __try_parse_number(value: str) -> Optional[float]:
+        """
+        Attempts to convert a string to a float; returns None if conversion fails.
+        """
         try:
             return float(value)
         except ValueError:
@@ -338,7 +381,27 @@ class Sheet:
 
     def __evaluate_internal_node(self, node: Node, cache: Dict[Position, Value]) -> Value:
         """
-        Evaluates an internal (non-leaf) node, using the cache to avoid redundant calculations.
+        Evaluates the value of an internal node within the syntax tree of a cell formula. This method
+        handles different types of operations, including unary, binary, and range operations, by
+        executing the associated mathematical operation or function.
+
+        For unary and binary operations, it recursively evaluates the operands (children nodes) before
+        performing the operation. For range operations, it evaluates each cell within the specified range
+        and then applies the range operation to those values. The method uses a cache to store and reuse
+        previously calculated values for efficiency.
+
+        Parameters:
+            node: The internal node to evaluate, which must be an instance of MathOperator.
+            cache: A dictionary used to store and retrieve previously evaluated values by their positions
+                   to avoid redundant calculations.
+
+        Returns:
+            The evaluated numerical value of the node as a float.
+
+        Raises:
+            EvaluationException: If the node's value is not a supported operator, if operands are missing
+                                 for unary or binary operations, if operands for range operations are not
+                                 numerical, or if any other evaluation error occurs.
         """
         if not isinstance(node.value, MathOperator):
             raise EvaluationException(f"Unsupported node value: {node.value}")
@@ -440,6 +503,16 @@ class Sheet:
 
     @classmethod
     def __calculate_range_positions(cls, range_value: str) -> Set[Position]:
+        """
+        Calculates and returns the positions within a specified cell range.
+
+        :param range_value: The cell range in the format 'A1:B2', where 'A1' is the start position and 'B2' is the end
+         position.
+        :return: A set of positions within the specified range, each position represented as a tuple of row and column
+         indices.
+        :raises BadNameException: If the range string is invalid or specifies a range outside the spreadsheet's
+         dimensions.
+        """
         match = cls.__RANGE_NAME_PATTERN.match(range_value)
         if not match:
             raise BadNameException(f"Invalid cells range name format: {range_value}")
@@ -462,5 +535,11 @@ class Sheet:
 
     @classmethod
     def __position_in_sheet_range(cls, position: Position) -> bool:
+        """
+        Checks if the specified position is within the spreadsheet's valid range.
+
+        :param position: A tuple containing the row and column index of the position to check.
+        :return: True if the position is within the valid range of the spreadsheet, False otherwise.
+        """
         row, col = position
         return 0 <= row < cls.ROWS_NUM and 0 <= col < cls.COLUMNS_NUM
