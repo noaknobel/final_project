@@ -17,9 +17,9 @@ class Node:
     """
     def __init__(self, value: Union[MathOperator, float, str], left: Optional["Node"] = None,
                  right: Optional["Node"] = None) -> None:
-        self.value = value
-        self.left = left
-        self.right = right
+        self.value: Union[MathOperator, float, str] = value
+        self.left: Node = left
+        self.right: Node = right
 
     def __str__(self) -> str:
         """Returns a human-readable string representation of the Node."""

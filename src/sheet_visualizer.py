@@ -212,7 +212,7 @@ class SheetVisualizer:
             self.__show_failure_reason_message_box(failure_reason)
 
     @staticmethod
-    def __value_to_show(value: Optional[Value]) -> Optional[str]:
+    def __value_to_show(value: Optional[Value]) -> str:
         """Give a value in a sheet cell, return the string value that should be shown in the GUI."""
         if value is None:
             return ""
@@ -224,8 +224,12 @@ class SheetVisualizer:
         return str(value)
 
     @classmethod
-    def __show_failure_reason_message_box(cls, failure_reason: FailureReason) -> None:
+    def __show_failure_reason_message_box(cls, failure_reason: Optional[FailureReason]) -> None:
         """Pop an error message box on the screen with the relevant error message to the given failure reason."""
-        error_message = cls.__FAILURE_REASON_STRINGS.get(failure_reason, "An unknown error occurred.")
+        if failure_reason is not None and failure_reason in cls.__FAILURE_REASON_STRINGS:
+            error_message = cls.__FAILURE_REASON_STRINGS[failure_reason]
+        else:
+            error_message = "An unknown error occurred."
         # Display the error message in a popup message box.
         messagebox.showerror("Error", error_message)
+

@@ -188,16 +188,18 @@ class ExpressionParser:
         """
         if not tokens:
             raise ParserException("List of tokens is empty.")
-        tokens_postfix: List[Union[MathOperator, str]] = []  # The returned tokens in a postfix order.
-        operators_stack: list[Union[MathOperator, str]] = []  # Stores Operator instances, and parentheses strings.
-        tokens = [token for token in tokens if not token.isspace()]  # Filter spaces from the tokens list.
+        tokens_postfix: List[Union[MathOperator, str, float]] = []  # The returned tokens in a postfix order.
+        operators_stack: List[Union[MathOperator, str]] = []  # Stores Operator instances, and parentheses strings.
+        # Filter spaces from the tokens list.
+        filtered_tokens: List[str] = [token for token in tokens if not token.isspace()]
         # Initializing state of previous token.
         is_prev_operand = False
         is_prev_open_bracket = False
         # Updating the postfix tokens list and the operator stack for each given token.
         token_index = 0
-        while token_index < len(tokens):
-            is_prev_operand, is_prev_open_bracket, token_index = self.__process_token_postfix(token_index, tokens,
+        while token_index < len(filtered_tokens):
+            is_prev_operand, is_prev_open_bracket, token_index = self.__process_token_postfix(token_index,
+                                                                                              filtered_tokens,
                                                                                               operators_stack,
                                                                                               tokens_postfix,
                                                                                               is_prev_operand,
@@ -212,11 +214,11 @@ class ExpressionParser:
             raise ParserException("The expression must end with an operand.")
         return tokens_postfix
 
-    def __process_token_postfix(self, token_index: int, tokens: List[str], operators_stack: List[str],
-                                tokens_postfix: List[Union[str, MathOperator]],
-                                is_previous_token_operand: bool, is_previous_token_open_bracket: bool) -> Tuple[bool,
-                                                                                                                bool,
-                                                                                                                int]:
+    def __process_token_postfix(self, token_index: int, tokens: List[str],
+                                operators_stack: List[Union[MathOperator, str]],
+                                tokens_postfix: List[Union[MathOperator, str, float]],
+                                is_previous_token_operand: bool,
+                                is_previous_token_open_bracket: bool) -> Tuple[bool, bool, int]:
         """
         Processes a single token in the postfix logic.
         :param token_index: index of the current token in the tokens list.
